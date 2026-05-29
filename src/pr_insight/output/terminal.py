@@ -37,15 +37,21 @@ def _render_summary_panel(report: ReviewReport) -> None:
         return
 
     content = Text()
-    if summary.get("purpose"):
-        content.append("Purpose: ", style="bold")
-        content.append(summary["purpose"] + "\n")
-    if summary.get("impact"):
-        content.append("Impact:  ", style="bold")
-        content.append(summary["impact"] + "\n")
-    if summary.get("tech_details"):
-        content.append("Details: ", style="bold")
-        content.append(summary["tech_details"] + "\n")
+
+    def _append_field(label: str, value: object) -> None:
+        if not value:
+            return
+        content.append(f"{label}: ", style="bold")
+        if isinstance(value, list):
+            content.append("\n")
+            for item in value:
+                content.append(f"  - {item}\n")
+        else:
+            content.append(str(value) + "\n")
+
+    _append_field("Purpose", summary.get("purpose"))
+    _append_field("Impact", summary.get("impact"))
+    _append_field("Details", summary.get("tech_details"))
     if summary.get("risk_areas"):
         content.append("Risk Areas:\n", style="bold")
         for area in summary["risk_areas"]:
