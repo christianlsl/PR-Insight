@@ -11,6 +11,7 @@ from ..ai.client import AIClient, AnalysisResult
 from ..github.models import PRInfo
 from .chunker import Chunk, chunk_pr
 from .strategies import (
+    _format_summary_context,
     build_review_tasks,
     build_risk_tasks,
     build_style_tasks,
@@ -118,19 +119,43 @@ async def analyze_pr(
 
     logger.info(f"PR split into {len(chunks)} chunk(s)")
 
-    # Step 2: Build all tasks
-    summary_tasks = build_summary_tasks(pr_info, chunks, language)
-    risk_tasks = build_risk_tasks(pr_info, chunks, language, focus)
-    review_tasks = build_review_tasks(pr_info, chunks, language)
-    style_tasks = build_style_tasks(chunks, language, pr_info)
+    # Step 2: For multi-chunk PRs, run summary first to provide context
+    summary_context = ""
+    has_multiple_chunks = len([c for c in chunks if not c.is_summary_only]) > 1
 
-    all_tasks = summary_tasks + risk_tasks + review_tasks + style_tasks
+    if has_multiple_chunks:
+        summary_tasks = build_summary_tasks(pr_info, chunks, language)
+        summary_results = await ai_client.analyze_batch(summary_tasks, on_task_done=on_task_done)
+        for result in summary_results:
+            if result.success and result.data:
+                report.summary = result.data
+                summary_context = _format_summary_context(result.data, language)
+            elif not result.success:
+                report.errors.append(f"{result.task_name}: {result.error}")
+        logger.info("Summary completed, injecting context into remaining tasks")
+
+    # Step 3: Build and run remaining tasks (with summary context for multi-chunk)
+    if has_multiple_chunks:
+        # Summary already ran; only build risk/review/style with context
+        risk_tasks = build_risk_tasks(pr_info, chunks, language, focus, summary_context)
+        review_tasks = build_review_tasks(pr_info, chunks, language, summary_context)
+        style_tasks = build_style_tasks(chunks, language, pr_info, summary_context)
+        remaining_tasks = risk_tasks + review_tasks + style_tasks
+    else:
+        # Single chunk: run everything in parallel (no need for summary-first)
+        summary_tasks = build_summary_tasks(pr_info, chunks, language)
+        risk_tasks = build_risk_tasks(pr_info, chunks, language, focus)
+        review_tasks = build_review_tasks(pr_info, chunks, language)
+        style_tasks = build_style_tasks(chunks, language, pr_info)
+        remaining_tasks = summary_tasks + risk_tasks + review_tasks + style_tasks
+
+    all_tasks = remaining_tasks
     logger.info(f"Running {len(all_tasks)} analysis tasks in parallel")
 
-    # Step 3: Execute all in parallel
+    # Step 4: Execute all in parallel
     results = await ai_client.analyze_batch(all_tasks, on_task_done=on_task_done)
 
-    # Step 4: Merge results
+    # Step 5: Merge results
     for result in results:
         if not result.success:
             report.errors.append(f"{result.task_name}: {result.error}")
