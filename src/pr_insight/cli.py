@@ -9,6 +9,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from . import __version__
 from .config import Config
@@ -121,22 +122,24 @@ def review(
     console.print("[bold blue]Step 3/4:[/bold blue] Running AI analysis...")
     ai_client = AIClient(api_key=ai_key, model=model, base_url=base_url)
 
-    completed = 0
-    last_task = ""
-
-    def _on_task_done(task_name: str) -> None:
-        nonlocal completed, last_task
-        completed += 1
-        last_task = task_name
-        status.update(f"[bold green]Analyzing...[/bold green] "
-                      f"[cyan]{completed}[/cyan] tasks completed "
-                      f"(last: {_friendly_name(last_task)})")
-
     def _fetch_file(path: str, ref: str) -> str:
         return gh_client.get_file_content(owner, repo, path, ref)
 
     try:
-        with console.status("[bold green]Analyzing...[/bold green]", spinner="dots") as status:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold green]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Analyzing", total=None)
+
+            def _on_task_done(task_name: str) -> None:
+                progress.advance(task_id)
+                progress.update(task_id, description=f"Analyzing ({_friendly_name(task_name)})")
+
             report = asyncio.run(analyze_pr(
                 pr_info=pr_info,
                 ai_client=ai_client,
@@ -146,6 +149,7 @@ def review(
                 on_task_done=_on_task_done,
                 file_content_fetcher=_fetch_file if not no_context else None,
             ))
+            progress.update(task_id, description="Analysis complete")
     except Exception as e:
         console.print(f"[red]Analysis error:[/red] {e}")
         raise SystemExit(1)
