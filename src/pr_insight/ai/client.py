@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import random
 from collections.abc import Callable
@@ -51,15 +50,15 @@ class AIClient:
         kwargs: dict = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
-        self._client = anthropic.Anthropic(**kwargs)
+        self._client = anthropic.AsyncAnthropic(**kwargs)
         self._model = model
 
-    def _call_sync(self, system_prompt: str, user_prompt: str) -> str:
-        """Synchronous API call with retry."""
+    async def _call(self, system_prompt: str, user_prompt: str) -> str:
+        """Async API call with retry."""
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
-                response = self._client.messages.create(
+                response = await self._client.messages.create(
                     model=self._model,
                     max_tokens=4096,
                     system=system_prompt,
@@ -70,15 +69,13 @@ class AIClient:
                 last_error = e
                 delay = RETRY_BASE_DELAY * (2 ** attempt) * (1 + random.uniform(0, 0.5))
                 logger.warning(f"Rate limited, retrying in {delay:.1f}s (attempt {attempt + 1})")
-                import time
-                time.sleep(delay)
+                await asyncio.sleep(delay)
             except anthropic.APIStatusError as e:
                 if e.status_code >= 500:
                     last_error = e
                     delay = RETRY_BASE_DELAY * (2 ** attempt) * (1 + random.uniform(0, 0.5))
                     logger.warning(f"Server error {e.status_code}, retrying in {delay:.1f}s")
-                    import time
-                    time.sleep(delay)
+                    await asyncio.sleep(delay)
                 else:
                     raise
         raise RuntimeError(f"API call failed after {MAX_RETRIES} retries: {last_error}")
@@ -86,9 +83,8 @@ class AIClient:
     async def analyze(self, task: AnalysisTask) -> AnalysisResult:
         """Run a single analysis task asynchronously."""
         try:
-            loop = asyncio.get_running_loop()
             raw = await asyncio.wait_for(
-                loop.run_in_executor(None, self._call_sync, task.system_prompt, task.user_prompt),
+                self._call(task.system_prompt, task.user_prompt),
                 timeout=ANALYSIS_TIMEOUT,
             )
             from .parser import parse_json_response
