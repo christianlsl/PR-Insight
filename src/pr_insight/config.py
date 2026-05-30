@@ -51,11 +51,12 @@ class Config:
     def __init__(self) -> None:
         load_dotenv()
         self._file_config = _load_config_file()
+        self._env = dict(os.environ)
 
     def get(self, key: str, default: str | None = None) -> str | None:
         # Priority: env var > config file > default param > built-in default
         env_key = f"PR_INSIGHT_{key.upper()}"
-        env_val = os.environ.get(env_key) or os.environ.get(key.upper())
+        env_val = self._env.get(env_key) or self._env.get(key.upper())
         if env_val:
             return env_val
         file_val = self._file_config.get(key)
