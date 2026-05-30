@@ -24,6 +24,13 @@ class Chunk:
     is_summary_only: bool = False  # for very large PRs, summary chunk
 
 
+def _is_binary(fc: FileChange) -> bool:
+    """Detect binary files from diff content."""
+    if not fc.patch:
+        return False
+    return "Binary files" in fc.patch or fc.patch.startswith("GIT binary patch")
+
+
 def _format_diff_for_chunk(file_changes: list[FileChange]) -> str:
     """Format file changes into a single diff text for AI analysis."""
     parts: list[str] = []
@@ -42,8 +49,11 @@ def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
     - Small PR (< 20 files, < 500 changes): single chunk
     - Medium PR (20-100 files): group by ~15 files per chunk
     - Large PR (> 100 files): summary + grouped chunks by directory
+
+    When *no_context* is True, skip binary files and context-dependent
+    processing to speed up analysis.
     """
-    files = pr_info.file_changes
+    files = [fc for fc in pr_info.file_changes if not _is_binary(fc)]
     total_files = len(files)
     total_changes = pr_info.total_changes
 

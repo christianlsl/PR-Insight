@@ -84,7 +84,7 @@ class AIClient:
     async def analyze(self, task: AnalysisTask) -> AnalysisResult:
         """Run a single analysis task asynchronously."""
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             raw = await asyncio.wait_for(
                 loop.run_in_executor(None, self._call_sync, task.system_prompt, task.user_prompt),
                 timeout=ANALYSIS_TIMEOUT,
