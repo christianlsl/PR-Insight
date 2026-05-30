@@ -6,11 +6,17 @@ import json
 import re
 
 
+class ResponseParseError(Exception):
+    """Raised when AI response cannot be parsed as structured JSON."""
+
+
 def parse_json_response(text: str) -> dict:
     """Extract JSON from AI response text.
 
     Handles responses that may contain markdown code blocks or extra text
     around the JSON payload.
+
+    Raises ResponseParseError if no valid JSON can be extracted.
     """
     # Try direct parse first
     text = text.strip()
@@ -36,5 +42,6 @@ def parse_json_response(text: str) -> dict:
             except json.JSONDecodeError:
                 continue
 
-    # Fallback: wrap raw text in a dict
-    return {"raw_text": text, "parse_error": "Could not extract structured JSON"}
+    raise ResponseParseError(
+        f"Could not extract structured JSON from response: {text[:200]}..."
+    )

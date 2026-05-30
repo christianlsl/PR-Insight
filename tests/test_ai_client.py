@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from pr_insight.ai.parser import parse_json_response
+from pr_insight.ai.parser import parse_json_response, ResponseParseError
 
 
 class TestParseJsonResponse:
@@ -34,11 +34,10 @@ class TestParseJsonResponse:
         result = parse_json_response(text)
         assert result == [1, 2, 3]
 
-    def test_invalid_json_fallback(self):
+    def test_invalid_json_raises_error(self):
         text = "This is not JSON at all"
-        result = parse_json_response(text)
-        assert "raw_text" in result
-        assert "parse_error" in result
+        with pytest.raises(ResponseParseError, match="Could not extract structured JSON"):
+            parse_json_response(text)
 
     def test_nested_json(self):
         data = '{"risks": [{"file": "main.py", "severity": "high"}]}'
