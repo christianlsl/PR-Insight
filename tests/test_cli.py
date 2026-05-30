@@ -66,3 +66,18 @@ class TestReviewCommand:
         assert "--output" in result.output
         assert "--risk-level" in result.output
         assert "--focus" in result.output
+        assert "--dry-run" in result.output
+
+    def test_config_unset(self, runner):
+        with runner.isolated_filesystem():
+            # Set then unset
+            runner.invoke(cli, ["config", "set", "model", "deepseek-chat"])
+            result = runner.invoke(cli, ["config", "unset", "model"])
+            assert result.exit_code == 0
+            assert "Unset" in result.output
+
+    def test_config_unset_nonexistent(self, runner):
+        with runner.isolated_filesystem():
+            result = runner.invoke(cli, ["config", "unset", "nonexistent_key"])
+            assert result.exit_code == 0
+            assert "not found" in result.output

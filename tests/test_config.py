@@ -76,3 +76,12 @@ class TestConfig:
     def test_supported_models_not_empty(self):
         assert len(SUPPORTED_MODELS) > 0
         assert "claude-sonnet-4-20250514" in SUPPORTED_MODELS
+
+    def test_unset_existing_key(self):
+        cfg = self._make_config(file_config={"model": "mimo"})
+        assert cfg.unset("model") is True
+        assert "model" not in cfg._file_config
+
+    def test_unset_nonexistent_key(self):
+        cfg = self._make_config()
+        assert cfg.unset("nonexistent") is False

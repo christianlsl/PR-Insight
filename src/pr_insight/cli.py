@@ -58,6 +58,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 @click.option("--language", "-l", default="zh", help="Report language: zh or en.")
 @click.option("--focus", "-f", default="all", help="Focus: security,performance,style,all.")
 @click.option("--no-context", is_flag=True, help="Skip fetching surrounding code context.")
+@click.option("--dry-run", is_flag=True, help="Fetch PR data and show plan without AI analysis.")
 def review(
     pr_url: str,
     output: str,
@@ -66,6 +67,7 @@ def review(
     language: str,
     focus: str,
     no_context: bool,
+    dry_run: bool,
 ) -> None:
     """Analyze a GitHub Pull Request with AI."""
     from .ai.client import AIClient
@@ -113,6 +115,26 @@ def review(
 
     console.print(f"  Found [green]{pr_info.files_changed}[/green] changed files "
                   f"(+{pr_info.additions}/-{pr_info.deletions})")
+
+    # Dry-run: show chunking plan and exit
+    if dry_run:
+        from .analyzer.chunker import chunk_pr
+        chunks = chunk_pr(pr_info)
+        console.print(Panel(
+            f"[bold]Dry Run — Chunking Plan[/bold]\n"
+            f"Files changed: {pr_info.files_changed}\n"
+            f"Chunks: {len(chunks)}\n"
+            f"Language: {language}\n"
+            f"Focus: {focus}\n"
+            f"Context: {'off' if no_context else 'on'}",
+            title="Plan",
+            border_style="yellow",
+        ))
+        for chunk in chunks:
+            label = " (summary only)" if chunk.is_summary_only else ""
+            files = ", ".join(fc.path for fc in chunk.file_changes) or "(none)"
+            console.print(f"  Chunk {chunk.index + 1}/{chunk.total}{label}: {files}")
+        raise SystemExit(0)
 
     # Step 2: Prepare
     console.print("[bold blue]Step 2/4:[/bold blue] Preparing analysis...")
@@ -202,6 +224,51 @@ def config_set(key: str, value: str) -> None:
     cfg.set(key, value)
     masked = "***" if any(s in key.lower() for s in ("key", "token", "secret")) else value
     console.print(f"[green]Set[/green] {key} = {masked}")
+
+
+@config.command("unset")
+@click.argument("key")
+def config_unset(key: str) -> None:
+    """Remove a configuration value."""
+    cfg = Config()
+    if cfg.unset(key):
+        console.print(f"[green]Unset[/green] {key}")
+    else:
+        console.print(f"[yellow]Key[/yellow] {key} not found in config file")
+
+
+@config.command("init")
+def config_init() -> None:
+    """Interactive configuration wizard."""
+    cfg = Config()
+    console.print(Panel(
+        "[bold]PR-Insight Configuration Wizard[/bold]\n"
+        "Press Enter to keep current value (shown in brackets).",
+        border_style="blue",
+    ))
+
+    github_token = input(f"GitHub Token [{cfg.get('github_token') or 'not set'}]: ").strip()
+    if github_token:
+        cfg.set("github_token", github_token)
+
+    anthropic_key = input(f"API Key [{cfg.get('anthropic_key') or 'not set'}]: ").strip()
+    if anthropic_key:
+        cfg.set("anthropic_key", anthropic_key)
+
+    model = input(f"Model [{cfg.model}]: ").strip()
+    if model:
+        cfg.set("model", model)
+
+    base_url = input(f"Base URL [{cfg.base_url or 'default (Anthropic)'}]: ").strip()
+    if base_url:
+        cfg.set("base_url", base_url)
+
+    language = input(f"Language (zh/en) [{cfg.language}]: ").strip()
+    if language:
+        cfg.set("language", language)
+
+    console.print("\n[green]Configuration saved![/green]")
+    config_show()
 
 
 @config.command("show")

@@ -105,6 +105,14 @@ class Config:
         self._file_config[key] = value
         _save_config_file(self._file_config)
 
+    def unset(self, key: str) -> bool:
+        """Remove a key from config file. Returns True if key existed."""
+        if key in self._file_config:
+            del self._file_config[key]
+            _save_config_file(self._file_config)
+            return True
+        return False
+
     def show(self) -> dict:
         """Return all effective config values (masks sensitive keys)."""
         result = dict(DEFAULTS)
