@@ -37,7 +37,7 @@ pr-insight config set github_token ghp_xxxxxxxxxxxx
 pr-insight config set anthropic_key sk-ant-xxxxxxxxxxxx
 
 # 可选：设置模型和自定义 API 地址
-pr-insight config set model mimo
+pr-insight config set model mimo-v2.5-pro
 pr-insight config set base_url https://token-plan-cn.xiaomimimo.com/anthropic
 ```
 
@@ -45,8 +45,8 @@ pr-insight config set base_url https://token-plan-cn.xiaomimimo.com/anthropic
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-export ANTHROPIC_API_KEY=sk-ant-xxxx
-export ANTHROPIC_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic
+export API_KEY=sk-ant-xxxx
+export BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic
 ```
 
 ### 2. 分析 PR
@@ -92,15 +92,7 @@ pr-insight config show                 # 查看当前配置
 
 ## 支持的模型
 
-| 模型                         | 说明                                    |
-| ---------------------------- | --------------------------------------- |
-| `claude-sonnet-4-20250514`   | Claude Sonnet 4（Anthropic 官方，默认） |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet（Anthropic 官方）     |
-| `deepseek-chat`              | DeepSeek Chat（通过 Anthropic 接口）    |
-| `deepseek-coder`             | DeepSeek Coder（通过 Anthropic 接口）   |
-| `mimo`                       | Mimo（通过 Anthropic 接口）             |
-
-使用国产模型需配置 `base_url`：
+默认为claude，如使用国产模型需配置 `base_url`，符合anthropic接口要求：
 
 ```bash
 pr-insight config set model mimo
@@ -171,4 +163,21 @@ src/pr_insight/
 
 ```bash
 uv run pytest tests/ -v
+
+# 实际测试
+# 1. Flask #5918 - automatic options as separate route (5 files)
+uv run pr-insight review https://github.com/pallets/flask/pull/5918 -o terminal -r medium
+
+# 2. Django #21370 - Changed inline admin button text (7 files)
+uv run pr-insight review https://github.com/django/django/pull/21370 -o terminal -r medium
+
+# 3. FastAPI #15554 - Enable Hindi docs translations (8 files)
+uv run pr-insight review https://github.com/fastapi/fastapi/pull/15554 -o terminal -r medium
+
+# 4. Ruff #25448 - TimeoutError alias UP041 (7 files)
+uv run pr-insight review https://github.com/astral-sh/ruff/pull/25448 -o terminal -r medium
+
+# 5. Ruff #25446 - Preserve slice-bound types (9 files)
+uv run pr-insight review https://github.com/astral-sh/ruff/pull/25446 -o terminal -r medium
+
 ```

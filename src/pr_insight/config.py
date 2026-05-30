@@ -75,11 +75,11 @@ class Config:
 
     @property
     def anthropic_key(self) -> str:
-        key = self.get("anthropic_key") or self.get("ANTHROPIC_API_KEY")
+        key = self.get("anthropic_key") or self.get("API_KEY")
         if not key:
             raise ValueError(
-                "Anthropic API key not configured. "
-                "Set ANTHROPIC_API_KEY env var or run: pr-insight config set anthropic_key <key>"
+                "API key not configured. "
+                "Set API_KEY env var or run: pr-insight config set anthropic_key <key>"
             )
         return key
 
