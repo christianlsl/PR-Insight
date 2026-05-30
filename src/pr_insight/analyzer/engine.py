@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..ai.client import AIClient, AnalysisResult
@@ -97,6 +98,7 @@ async def analyze_pr(
     language: str = "zh",
     focus: str = "all",
     no_context: bool = False,
+    on_task_done: Callable[[str], None] | None = None,
 ) -> ReviewReport:
     """Run full analysis pipeline on a PR.
 
@@ -125,7 +127,7 @@ async def analyze_pr(
     logger.info(f"Running {len(all_tasks)} analysis tasks in parallel")
 
     # Step 3: Execute all in parallel
-    results = await ai_client.analyze_batch(all_tasks)
+    results = await ai_client.analyze_batch(all_tasks, on_task_done=on_task_done)
 
     # Step 4: Merge results
     for result in results:

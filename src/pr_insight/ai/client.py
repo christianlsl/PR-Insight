@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import anthropic
@@ -96,7 +97,17 @@ class AIClient:
         except Exception as e:
             return AnalysisResult(task_name=task.name, success=False, error=str(e))
 
-    async def analyze_batch(self, tasks: list[AnalysisTask]) -> list[AnalysisResult]:
+    async def analyze_batch(
+        self,
+        tasks: list[AnalysisTask],
+        on_task_done: Callable[[str], None] | None = None,
+    ) -> list[AnalysisResult]:
         """Run multiple analysis tasks in parallel."""
-        results = await asyncio.gather(*(self.analyze(t) for t in tasks))
+        async def _run(task: AnalysisTask) -> AnalysisResult:
+            result = await self.analyze(task)
+            if on_task_done is not None:
+                on_task_done(task.name)
+            return result
+
+        results = await asyncio.gather(*(_run(t) for t in tasks))
         return list(results)
