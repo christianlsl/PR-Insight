@@ -1,7 +1,7 @@
 """Tests for AI client and response parser."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from pr_insight.ai.parser import parse_json_response, ResponseParseError
 
@@ -49,7 +49,7 @@ class TestParseJsonResponse:
 class TestAIClient:
     """Tests for AIClient (mocked Anthropic SDK)."""
 
-    @patch("pr_insight.ai.client.anthropic.Anthropic")
+    @patch("pr_insight.ai.client.anthropic.AsyncAnthropic")
     def test_init_with_base_url(self, mock_anthropic_cls):
         from pr_insight.ai.client import AIClient
 
@@ -60,7 +60,7 @@ class TestAIClient:
             api_key="test-key", base_url="https://custom.api.com/anthropic"
         )
 
-    @patch("pr_insight.ai.client.anthropic.Anthropic")
+    @patch("pr_insight.ai.client.anthropic.AsyncAnthropic")
     def test_init_without_base_url(self, mock_anthropic_cls):
         from pr_insight.ai.client import AIClient
 
@@ -68,8 +68,8 @@ class TestAIClient:
 
         mock_anthropic_cls.assert_called_once_with(api_key="test-key")
 
-    @patch("pr_insight.ai.client.anthropic.Anthropic")
-    def test_call_sync_success(self, mock_anthropic_cls):
+    @patch("pr_insight.ai.client.anthropic.AsyncAnthropic")
+    async def test_call_success(self, mock_anthropic_cls):
         from pr_insight.ai.client import AIClient
 
         mock_client = MagicMock()
@@ -77,16 +77,17 @@ class TestAIClient:
 
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text='{"result": "ok"}')]
-        mock_client.messages.create.return_value = mock_response
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
 
         ai = AIClient(api_key="test-key")
-        result = ai._call_sync("system", "user")
+        result = await ai._call("system", "user")
 
         assert result == '{"result": "ok"}'
         mock_client.messages.create.assert_called_once()
 
-    @patch("pr_insight.ai.client.anthropic.Anthropic")
-    def test_call_sync_retry_on_rate_limit(self, mock_anthropic_cls):
+    @patch("pr_insight.ai.client.anthropic.AsyncAnthropic")
+    @patch("pr_insight.ai.client.asyncio.sleep", new_callable=AsyncMock)
+    async def test_call_retry_on_rate_limit(self, mock_sleep, mock_anthropic_cls):
         import anthropic
         from pr_insight.ai.client import AIClient
 
@@ -96,18 +97,18 @@ class TestAIClient:
         # First call raises RateLimitError, second succeeds
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text='{"ok": true}')]
-        mock_client.messages.create.side_effect = [
+        mock_client.messages.create = AsyncMock(side_effect=[
             anthropic.RateLimitError(
                 message="rate limited",
                 response=MagicMock(status_code=429, headers={}),
                 body=None,
             ),
             mock_response,
-        ]
+        ])
 
         ai = AIClient(api_key="test-key")
-        with patch("time.sleep"):  # skip delay
-            result = ai._call_sync("system", "user")
+        result = await ai._call("system", "user")
 
         assert result == '{"ok": true}'
         assert mock_client.messages.create.call_count == 2
+        mock_sleep.assert_called_once()
