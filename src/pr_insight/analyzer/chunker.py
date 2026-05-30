@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from ..github.models import FileChange, PRInfo
+from ..github.models import DiffHunk, FileChange, FileStatus, PRInfo
+
+logger = logging.getLogger(__name__)
 
 # Approximate token limits (conservative estimates)
 MAX_FILES_PER_CHUNK = 15
 MAX_DIFF_CHARS_PER_CHUNK = 80_000  # ~20K tokens
 SMALL_PR_FILES = 20
 SMALL_PR_CHANGES = 500  # lines
+CONTEXT_LINES = 20  # lines of context before/after each hunk
 
 
 @dataclass
@@ -31,18 +36,63 @@ def _is_binary(fc: FileChange) -> bool:
     return "Binary files" in fc.patch or fc.patch.startswith("GIT binary patch")
 
 
+def _populate_hunk_context(hunks: list[DiffHunk], file_lines: list[str]) -> None:
+    """Fill context_before / context_after for each hunk from full file content."""
+    total = len(file_lines)
+    for hunk in hunks:
+        # new_start is 1-based
+        start = max(0, hunk.new_start - 1 - CONTEXT_LINES)
+        end = min(total, hunk.new_start - 1 + hunk.new_lines + CONTEXT_LINES)
+        hunk.context_before = "\n".join(file_lines[start:hunk.new_start - 1])
+        hunk.context_after = "\n".join(file_lines[hunk.new_start - 1 + hunk.new_lines:end])
+
+
+def _fetch_file_context(
+    file_changes: list[FileChange],
+    fetcher: Callable[[str, str], str],
+    head_ref: str,
+) -> None:
+    """Fetch file content and populate hunk context for modified files."""
+    for fc in file_changes:
+        if fc.status in (FileStatus.DELETED, FileStatus.ADDED):
+            continue
+        if not fc.hunks:
+            continue
+        try:
+            content = fetcher(fc.path, head_ref)
+            if content:
+                _populate_hunk_context(fc.hunks, content.splitlines())
+        except Exception as e:
+            logger.warning(f"Failed to fetch context for {fc.path}: {e}")
+
+
 def _format_diff_for_chunk(file_changes: list[FileChange]) -> str:
     """Format file changes into a single diff text for AI analysis."""
     parts: list[str] = []
     for fc in file_changes:
         parts.append(f"### {fc.path} ({fc.status.value}, +{fc.additions}/-{fc.deletions})")
-        if fc.patch:
+        if fc.hunks and any(h.context_before or h.context_after for h in fc.hunks):
+            # Include context from hunks
+            for hunk in fc.hunks:
+                if hunk.context_before:
+                    parts.append(f"```  // context before line {hunk.new_start}")
+                    parts.append(hunk.context_before)
+                parts.append(hunk.content)
+                if hunk.context_after:
+                    parts.append(f"```  // context after line {hunk.new_start + hunk.new_lines - 1}")
+                    parts.append(hunk.context_after)
+                parts.append("")
+        elif fc.patch:
             parts.append(fc.patch)
         parts.append("")
     return "\n".join(parts)
 
 
-def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
+def chunk_pr(
+    pr_info: PRInfo,
+    no_context: bool = False,
+    file_content_fetcher: Callable[[str, str], str] | None = None,
+) -> list[Chunk]:
     """Split PR changes into analyzable chunks.
 
     Strategy:
@@ -50,8 +100,9 @@ def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
     - Medium PR (20-100 files): group by ~15 files per chunk
     - Large PR (> 100 files): summary + grouped chunks by directory
 
-    When *no_context* is True, skip binary files and context-dependent
-    processing to speed up analysis.
+    When *no_context* is False and *file_content_fetcher* is provided,
+    fetch surrounding code context for each hunk to help AI understand
+    the full picture.
     """
     files = [fc for fc in pr_info.file_changes if not _is_binary(fc)]
     total_files = len(files)
@@ -59,6 +110,10 @@ def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
 
     if total_files == 0:
         return []
+
+    # Fetch context for hunks if enabled
+    if not no_context and file_content_fetcher is not None:
+        _fetch_file_context(files, file_content_fetcher, pr_info.head_branch)
 
     # Small PR: single chunk
     if total_files <= SMALL_PR_FILES and total_changes <= SMALL_PR_CHANGES:
@@ -71,7 +126,6 @@ def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
 
     # Large PR: add summary chunk first
     chunks: list[Chunk] = []
-    start_idx = 0
 
     if total_files > 100:
         # Summary chunk with just file list
@@ -89,7 +143,6 @@ def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
             diff_text=summary_text,
             is_summary_only=True,
         ))
-        start_idx = 1
 
     # Group files into chunks
     # Sort by directory for better context grouping
@@ -97,7 +150,6 @@ def chunk_pr(pr_info: PRInfo, no_context: bool = False) -> list[Chunk]:
 
     current_chunk_files: list[FileChange] = []
     current_chunk_size = 0
-    chunk_start_idx = len(chunks)
 
     for fc in sorted_files:
         fc_size = len(fc.patch)
