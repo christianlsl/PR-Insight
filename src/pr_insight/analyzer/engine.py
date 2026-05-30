@@ -99,6 +99,7 @@ async def analyze_pr(
     focus: str = "all",
     no_context: bool = False,
     on_task_done: Callable[[str], None] | None = None,
+    file_content_fetcher: Callable[[str, str], str] | None = None,
 ) -> ReviewReport:
     """Run full analysis pipeline on a PR.
 
@@ -110,7 +111,7 @@ async def analyze_pr(
     report = ReviewReport(pr_info=pr_info)
 
     # Step 1: Chunk
-    chunks = chunk_pr(pr_info, no_context)
+    chunks = chunk_pr(pr_info, no_context, file_content_fetcher)
     if not chunks:
         report.summary = {"purpose": "No changes to analyze", "impact": "", "tech_details": ""}
         return report

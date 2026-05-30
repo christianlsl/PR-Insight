@@ -132,6 +132,9 @@ def review(
                       f"[cyan]{completed}[/cyan] tasks completed "
                       f"(last: {_friendly_name(last_task)})")
 
+    def _fetch_file(path: str, ref: str) -> str:
+        return gh_client.get_file_content(owner, repo, path, ref)
+
     try:
         with console.status("[bold green]Analyzing...[/bold green]", spinner="dots") as status:
             report = asyncio.run(analyze_pr(
@@ -141,6 +144,7 @@ def review(
                 focus=focus,
                 no_context=no_context,
                 on_task_done=_on_task_done,
+                file_content_fetcher=_fetch_file if not no_context else None,
             ))
     except Exception as e:
         console.print(f"[red]Analysis error:[/red] {e}")
