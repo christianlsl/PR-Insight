@@ -16,6 +16,7 @@ MAX_DIFF_CHARS_PER_CHUNK = 80_000  # ~20K tokens
 SMALL_PR_FILES = 20
 SMALL_PR_CHANGES = 500  # lines
 CONTEXT_LINES = 20  # lines of context before/after each hunk
+MAX_HUNKS_PER_FILE = 10  # split files with more hunks across chunks
 
 
 @dataclass
@@ -34,6 +35,30 @@ def _is_binary(fc: FileChange) -> bool:
     if not fc.patch:
         return False
     return "Binary files" in fc.patch or fc.patch.startswith("GIT binary patch")
+
+
+def _split_large_files(file_changes: list[FileChange]) -> list[FileChange]:
+    """Split files with many hunks into multiple virtual file changes."""
+    result: list[FileChange] = []
+    for fc in file_changes:
+        if len(fc.hunks) <= MAX_HUNKS_PER_FILE:
+            result.append(fc)
+            continue
+        # Split hunks into groups
+        for i in range(0, len(fc.hunks), MAX_HUNKS_PER_FILE):
+            chunk_hunks = fc.hunks[i:i + MAX_HUNKS_PER_FILE]
+            patch = "\n".join(h.content for h in chunk_hunks)
+            result.append(FileChange(
+                path=fc.path,
+                status=fc.status,
+                additions=sum(h.new_lines for h in chunk_hunks),
+                deletions=sum(h.old_lines for h in chunk_hunks),
+                patch=patch,
+                hunks=chunk_hunks,
+                old_path=fc.old_path,
+                language=fc.language,
+            ))
+    return result
 
 
 def _populate_hunk_context(hunks: list[DiffHunk], file_lines: list[str]) -> None:
@@ -104,7 +129,7 @@ def chunk_pr(
     fetch surrounding code context for each hunk to help AI understand
     the full picture.
     """
-    files = [fc for fc in pr_info.file_changes if not _is_binary(fc)]
+    files = _split_large_files([fc for fc in pr_info.file_changes if not _is_binary(fc)])
     total_files = len(files)
     total_changes = pr_info.total_changes
 
