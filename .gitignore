@@ -10,3 +10,5 @@ venv/
 # Python egg metadata
 *.egg-info/
 *.egg
+
+reports/
