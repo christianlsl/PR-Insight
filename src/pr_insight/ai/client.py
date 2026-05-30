@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -13,8 +14,9 @@ import anthropic
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
-RETRY_BASE_DELAY = 2  # seconds
+RETRY_BASE_DELAY = 3  # seconds
 ANALYSIS_TIMEOUT = 120  # seconds
+MAX_CONCURRENT_TASKS = 3  # limit parallel API calls
 
 
 @dataclass
@@ -66,15 +68,15 @@ class AIClient:
                 return response.content[0].text
             except anthropic.RateLimitError as e:
                 last_error = e
-                delay = RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"Rate limited, retrying in {delay}s (attempt {attempt + 1})")
+                delay = RETRY_BASE_DELAY * (2 ** attempt) * (1 + random.uniform(0, 0.5))
+                logger.warning(f"Rate limited, retrying in {delay:.1f}s (attempt {attempt + 1})")
                 import time
                 time.sleep(delay)
             except anthropic.APIStatusError as e:
                 if e.status_code >= 500:
                     last_error = e
-                    delay = RETRY_BASE_DELAY * (2 ** attempt)
-                    logger.warning(f"Server error {e.status_code}, retrying in {delay}s")
+                    delay = RETRY_BASE_DELAY * (2 ** attempt) * (1 + random.uniform(0, 0.5))
+                    logger.warning(f"Server error {e.status_code}, retrying in {delay:.1f}s")
                     import time
                     time.sleep(delay)
                 else:
@@ -102,9 +104,12 @@ class AIClient:
         tasks: list[AnalysisTask],
         on_task_done: Callable[[str], None] | None = None,
     ) -> list[AnalysisResult]:
-        """Run multiple analysis tasks in parallel."""
+        """Run multiple analysis tasks in parallel with concurrency control."""
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
+
         async def _run(task: AnalysisTask) -> AnalysisResult:
-            result = await self.analyze(task)
+            async with semaphore:
+                result = await self.analyze(task)
             if on_task_done is not None:
                 on_task_done(task.name)
             return result
