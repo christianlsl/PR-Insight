@@ -16,6 +16,20 @@ from .config import Config
 console = Console()
 
 
+def _friendly_name(task_name: str) -> str:
+    """Map task name to a human-readable label."""
+    if task_name == "summary":
+        return "Summary"
+    for prefix, label in [("risk_", "Risk"), ("review_", "Review"), ("style_", "Style")]:
+        if task_name.startswith(prefix):
+            try:
+                chunk_num = int(task_name[len(prefix):]) + 1
+                return f"{label} (chunk {chunk_num})"
+            except ValueError:
+                return label
+    return task_name
+
+
 @click.group()
 @click.version_option(version=__version__, prog_name="pr-insight")
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging.")
@@ -107,14 +121,27 @@ def review(
     console.print("[bold blue]Step 3/4:[/bold blue] Running AI analysis...")
     ai_client = AIClient(api_key=ai_key, model=model, base_url=base_url)
 
+    completed = 0
+    last_task = ""
+
+    def _on_task_done(task_name: str) -> None:
+        nonlocal completed, last_task
+        completed += 1
+        last_task = task_name
+        status.update(f"[bold green]Analyzing...[/bold green] "
+                      f"[cyan]{completed}[/cyan] tasks completed "
+                      f"(last: {_friendly_name(last_task)})")
+
     try:
-        report = asyncio.run(analyze_pr(
-            pr_info=pr_info,
-            ai_client=ai_client,
-            language=language,
-            focus=focus,
-            no_context=no_context,
-        ))
+        with console.status("[bold green]Analyzing...[/bold green]", spinner="dots") as status:
+            report = asyncio.run(analyze_pr(
+                pr_info=pr_info,
+                ai_client=ai_client,
+                language=language,
+                focus=focus,
+                no_context=no_context,
+                on_task_done=_on_task_done,
+            ))
     except Exception as e:
         console.print(f"[red]Analysis error:[/red] {e}")
         raise SystemExit(1)
