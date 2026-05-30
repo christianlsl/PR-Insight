@@ -46,7 +46,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 @click.option(
     "--output", "-o",
     default="terminal",
-    help="Output: terminal, html, comment (comma-separated).",
+    help="Output: terminal, html, json, comment (comma-separated).",
 )
 @click.option("--output-dir", default="./reports", help="Directory for HTML reports.")
 @click.option(
@@ -178,6 +178,12 @@ def review(
             console.print("  Posted review comment to PR.")
         except Exception as e:
             console.print(f"  [yellow]Failed to post comment:[/yellow] {e}")
+
+    if "json" in outputs:
+        from .output.json_report import generate_json_report
+        out_path = Path(output_dir) / f"pr-{number}-review.json"
+        generate_json_report(report, out_path)
+        console.print(f"  JSON report: [green]{out_path}[/green]")
 
     console.print("\n[green]Review complete![/green]")
 
