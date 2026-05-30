@@ -25,6 +25,7 @@ class AnalysisTask:
     name: str  # e.g. "summary", "risk", "review", "style"
     system_prompt: str
     user_prompt: str
+    max_tokens: int = 4096
 
 
 @dataclass
@@ -53,14 +54,14 @@ class AIClient:
         self._client = anthropic.AsyncAnthropic(**kwargs)
         self._model = model
 
-    async def _call(self, system_prompt: str, user_prompt: str) -> str:
+    async def _call(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
         """Async API call with retry."""
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
                 response = await self._client.messages.create(
                     model=self._model,
-                    max_tokens=4096,
+                    max_tokens=max_tokens,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                 )
@@ -84,7 +85,7 @@ class AIClient:
         """Run a single analysis task asynchronously."""
         try:
             raw = await asyncio.wait_for(
-                self._call(task.system_prompt, task.user_prompt),
+                self._call(task.system_prompt, task.user_prompt, task.max_tokens),
                 timeout=ANALYSIS_TIMEOUT,
             )
             from .parser import parse_json_response

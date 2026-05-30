@@ -64,6 +64,7 @@ def build_summary_tasks(
         name="summary",
         system_prompt=system,
         user_prompt=build_summary_prompt(pr_text, diff_text, language),
+        max_tokens=2048,
     )]
 
 
@@ -91,6 +92,7 @@ def build_risk_tasks(
             name=f"risk_{chunk.index}",
             system_prompt=system,
             user_prompt=build_risk_prompt(pr_text, files_text, language, focus),
+            max_tokens=4096,
         ))
 
     return tasks
@@ -119,6 +121,7 @@ def build_review_tasks(
             name=f"review_{chunk.index}",
             system_prompt=system,
             user_prompt=build_review_prompt(pr_text, files_text, language),
+            max_tokens=6096,
         ))
 
     return tasks
@@ -145,6 +148,7 @@ def build_style_tasks(
             name=f"style_{chunk.index}",
             system_prompt=system,
             user_prompt=build_style_prompt(diff_text, language, pr_text),
+            max_tokens=2048,
         ))
 
     return tasks
