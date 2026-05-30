@@ -121,7 +121,7 @@ async def analyze_pr(
     summary_tasks = build_summary_tasks(pr_info, chunks, language)
     risk_tasks = build_risk_tasks(pr_info, chunks, language, focus)
     review_tasks = build_review_tasks(pr_info, chunks, language)
-    style_tasks = build_style_tasks(chunks, language)
+    style_tasks = build_style_tasks(chunks, language, pr_info)
 
     all_tasks = summary_tasks + risk_tasks + review_tasks + style_tasks
     logger.info(f"Running {len(all_tasks)} analysis tasks in parallel")

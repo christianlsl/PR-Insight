@@ -93,9 +93,11 @@ def build_review_tasks(
 def build_style_tasks(
     chunks: list[Chunk],
     language: str = "zh",
+    pr_info: PRInfo | None = None,
 ) -> list[AnalysisTask]:
     """Build style check tasks — one per chunk (excluding summary-only)."""
     system = get_system_prompt(language)
+    pr_text = format_pr_info(pr_info) if pr_info else ""
     tasks: list[AnalysisTask] = []
 
     for chunk in chunks:
@@ -104,7 +106,7 @@ def build_style_tasks(
         tasks.append(AnalysisTask(
             name=f"style_{chunk.index}",
             system_prompt=system,
-            user_prompt=build_style_prompt(chunk.diff_text, language),
+            user_prompt=build_style_prompt(chunk.diff_text, language, pr_text),
         ))
 
     return tasks
