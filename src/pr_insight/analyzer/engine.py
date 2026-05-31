@@ -75,7 +75,11 @@ def _extract_findings(result: AnalysisResult, finding_key: str) -> list[ReviewFi
     if not result.success or not result.data:
         return []
 
-    items = result.data.get(finding_key, [])
+    # Handle both dict (with finding_key) and list (direct array) responses
+    if isinstance(result.data, list):
+        items = result.data
+    else:
+        items = result.data.get(finding_key, [])
     findings: list[ReviewFinding] = []
     for item in items:
         if not isinstance(item, dict):
