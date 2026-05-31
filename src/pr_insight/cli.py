@@ -237,6 +237,13 @@ def config_unset(key: str) -> None:
         console.print(f"[yellow]Key[/yellow] {key} not found in config file")
 
 
+def _mask(val: str | None) -> str:
+    """Mask sensitive value for display."""
+    if not val:
+        return "not set"
+    return val[:4] + "***" + val[-4:] if len(val) > 8 else "***"
+
+
 @config.command("init")
 def config_init() -> None:
     """Interactive configuration wizard."""
@@ -247,11 +254,11 @@ def config_init() -> None:
         border_style="blue",
     ))
 
-    github_token = input(f"GitHub Token [{cfg.get('github_token') or 'not set'}]: ").strip()
+    github_token = input(f"GitHub Token [{_mask(cfg.get('github_token'))}]: ").strip()
     if github_token:
         cfg.set("github_token", github_token)
 
-    anthropic_key = input(f"API Key [{cfg.get('anthropic_key') or 'not set'}]: ").strip()
+    anthropic_key = input(f"API Key [{_mask(cfg.get('anthropic_key'))}]: ").strip()
     if anthropic_key:
         cfg.set("anthropic_key", anthropic_key)
 
@@ -268,7 +275,9 @@ def config_init() -> None:
         cfg.set("language", language)
 
     console.print("\n[green]Configuration saved![/green]")
-    config_show()
+    settings = cfg.show()
+    table_data = "\n".join(f"  {k}: {v}" for k, v in settings.items())
+    console.print(Panel(table_data, title="Configuration", border_style="blue"))
 
 
 @config.command("show")
