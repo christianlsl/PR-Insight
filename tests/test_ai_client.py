@@ -76,7 +76,8 @@ class TestAIClient:
         mock_anthropic_cls.return_value = mock_client
 
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"result": "ok"}')]
+        mock_block = MagicMock(text='{"result": "ok"}', type="text")
+        mock_response.content = [mock_block]
         mock_client.messages.create = AsyncMock(return_value=mock_response)
 
         ai = AIClient(api_key="test-key")
@@ -96,7 +97,8 @@ class TestAIClient:
 
         # First call raises RateLimitError, second succeeds
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"ok": true}')]
+        mock_block = MagicMock(text='{"ok": true}', type="text")
+        mock_response.content = [mock_block]
         mock_client.messages.create = AsyncMock(side_effect=[
             anthropic.RateLimitError(
                 message="rate limited",

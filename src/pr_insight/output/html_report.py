@@ -12,8 +12,10 @@ from ..analyzer.engine import ReviewReport
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
 
-def _md_to_html(text: str) -> str:
+def _md_to_html(text) -> str:
     """Convert simple markdown patterns to HTML."""
+    if isinstance(text, list):
+        text = "\n".join(str(item) for item in text)
     if not text:
         return ""
     # Escape HTML special chars
