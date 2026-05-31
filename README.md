@@ -11,6 +11,10 @@ AI 代码评审工具，帮助开发者提升 Pull Request 的 Review 效率与�
 - **多模型支持** — Claude、DeepSeek、Mimo 等，统一走 Anthropic 兼容接口
 - **多格式输出** — 终端彩色报告、可分享的 HTML 报告、GitHub PR 评论
 
+## 功能演示
+
+[Bilibili 视频演示](https://www.bilibili.com/video/BV1P3Vn6YEPK/)
+
 ## 安装
 
 ```bash
