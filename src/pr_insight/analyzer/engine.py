@@ -186,4 +186,8 @@ async def analyze_pr(
         lst.clear()
         lst.extend(unique)
 
+    # Sort by severity descending (high first)
+    for lst in [report.risks, report.suggestions, report.style_issues]:
+        lst.sort(key=lambda f: SEVERITY_ORDER.get(f.severity, 0), reverse=True)
+
     return report
