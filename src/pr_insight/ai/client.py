@@ -65,7 +65,10 @@ class AIClient:
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                 )
-                return response.content[0].text
+                for block in response.content:
+                    if block.type == "text":
+                        return block.text
+                raise RuntimeError("No text block in API response")
             except anthropic.RateLimitError as e:
                 last_error = e
                 delay = RETRY_BASE_DELAY * (2 ** attempt) * (1 + random.uniform(0, 0.5))
