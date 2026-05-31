@@ -45,7 +45,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 @click.argument("pr_url")
 @click.option(
     "--output", "-o",
-    default="terminal",
+    default="terminal,html",
     help="Output: terminal, html, json, comment (comma-separated).",
 )
 @click.option("--output-dir", default="./reports", help="Directory for HTML reports.")
