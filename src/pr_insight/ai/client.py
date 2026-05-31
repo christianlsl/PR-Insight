@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 3  # seconds
-ANALYSIS_TIMEOUT = 120  # seconds
+ANALYSIS_TIMEOUT = 300  # seconds
 MAX_CONCURRENT_TASKS = 3  # limit parallel API calls
 
 
@@ -68,6 +68,11 @@ class AIClient:
                 for block in response.content:
                     if block.type == "text":
                         return block.text
+                # Fallback: extract from thinking blocks if no text block
+                for block in response.content:
+                    thinking = getattr(block, "thinking", None)
+                    if thinking:
+                        return thinking
                 raise RuntimeError("No text block in API response")
             except anthropic.RateLimitError as e:
                 last_error = e
