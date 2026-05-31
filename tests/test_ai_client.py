@@ -46,6 +46,32 @@ class TestParseJsonResponse:
         assert result["risks"][0]["severity"] == "high"
 
 
+def _make_mock_stream(text: str):
+    """Create a mock for the streaming context manager."""
+
+    class _MockStream:
+        def __init__(self, text: str):
+            self._text = text
+
+        @property
+        def text_stream(self):
+            async def _gen():
+                yield self._text
+            return _gen()
+
+    class _MockStreamCtx:
+        def __init__(self, text: str):
+            self._text = text
+
+        async def __aenter__(self):
+            return _MockStream(self._text)
+
+        async def __aexit__(self, *args):
+            pass
+
+    return _MockStreamCtx(text)
+
+
 class TestAIClient:
     """Tests for AIClient (mocked Anthropic SDK)."""
 
@@ -74,16 +100,15 @@ class TestAIClient:
 
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"result": "ok"}')]
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        mock_client.messages.stream = MagicMock(
+            return_value=_make_mock_stream('{"result": "ok"}')
+        )
 
         ai = AIClient(api_key="test-key")
         result = await ai._call("system", "user")
 
         assert result == '{"result": "ok"}'
-        mock_client.messages.create.assert_called_once()
+        mock_client.messages.stream.assert_called_once()
 
     @patch("pr_insight.ai.client.anthropic.AsyncAnthropic")
     @patch("pr_insight.ai.client.asyncio.sleep", new_callable=AsyncMock)
@@ -95,20 +120,18 @@ class TestAIClient:
         mock_anthropic_cls.return_value = mock_client
 
         # First call raises RateLimitError, second succeeds
-        mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"ok": true}')]
-        mock_client.messages.create = AsyncMock(side_effect=[
+        mock_client.messages.stream = MagicMock(side_effect=[
             anthropic.RateLimitError(
                 message="rate limited",
                 response=MagicMock(status_code=429, headers={}),
                 body=None,
             ),
-            mock_response,
+            _make_mock_stream('{"ok": true}'),
         ])
 
         ai = AIClient(api_key="test-key")
         result = await ai._call("system", "user")
 
         assert result == '{"ok": true}'
-        assert mock_client.messages.create.call_count == 2
+        assert mock_client.messages.stream.call_count == 2
         mock_sleep.assert_called_once()

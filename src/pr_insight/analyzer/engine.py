@@ -100,6 +100,7 @@ async def analyze_pr(
     focus: str = "all",
     no_context: bool = False,
     on_task_done: Callable[[str], None] | None = None,
+    on_stream: Callable[[str], None] | None = None,
     file_content_fetcher: Callable[[str, str], str] | None = None,
 ) -> ReviewReport:
     """Run full analysis pipeline on a PR.
@@ -125,7 +126,7 @@ async def analyze_pr(
 
     if has_multiple_chunks:
         summary_tasks = build_summary_tasks(pr_info, chunks, language)
-        summary_results = await ai_client.analyze_batch(summary_tasks, on_task_done=on_task_done)
+        summary_results = await ai_client.analyze_batch(summary_tasks, on_task_done=on_task_done, on_stream=on_stream)
         for result in summary_results:
             if result.success and result.data:
                 report.summary = result.data
@@ -153,7 +154,7 @@ async def analyze_pr(
     logger.info(f"Running {len(all_tasks)} analysis tasks in parallel")
 
     # Step 4: Execute all in parallel
-    results = await ai_client.analyze_batch(all_tasks, on_task_done=on_task_done)
+    results = await ai_client.analyze_batch(all_tasks, on_task_done=on_task_done, on_stream=on_stream)
 
     # Step 5: Merge results
     for result in results:

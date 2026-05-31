@@ -7,7 +7,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ..analyzer.engine import ReviewFinding, ReviewReport
+from ..ai.client import AnalysisResult
+from ..analyzer.engine import ReviewFinding, ReviewReport, _extract_findings
 
 console = Console()
 
@@ -93,6 +94,51 @@ def _render_errors(errors: list[str]) -> None:
         title="Analysis Errors",
         border_style="red",
     ))
+
+
+def render_task_result(result: AnalysisResult, risk_level: str = "low") -> None:
+    """Render a single task result immediately after completion."""
+    if not result.success:
+        console.print(f"  [red]✗ {result.task_name} failed: {result.error}[/red]")
+        return
+
+    data = result.data or {}
+    name = result.task_name
+
+    if name == "summary":
+        parts: list[str] = []
+        if data.get("purpose"):
+            parts.append(f"[bold]Purpose:[/bold] {data['purpose']}")
+        if data.get("impact"):
+            parts.append(f"[bold]Impact:[/bold] {data['impact']}")
+        if data.get("tech_details"):
+            parts.append(f"[bold]Details:[/bold] {data['tech_details']}")
+        if parts:
+            console.print(Panel("\n".join(parts), border_style="blue", padding=(0, 1)))
+
+    elif name.startswith("risk_"):
+        findings = _extract_findings(result, "risks")
+        findings = [f for f in findings if _should_show(f.severity, risk_level)]
+        if findings:
+            for f in findings:
+                sd = _severity_display(f.severity)
+                loc = f"{f.file}:{f.line}" if f.line else f.file
+                console.print(f"    {sd}  {loc}  {f.description}")
+
+    elif name.startswith("review_"):
+        findings = _extract_findings(result, "suggestions")
+        findings = [f for f in findings if _should_show(f.severity, risk_level)]
+        if findings:
+            for f in findings:
+                loc = f"{f.file}:{f.line}" if f.line else f.file
+                console.print(f"    [blue]→[/blue] {loc}  {f.suggestion or f.description}")
+
+    elif name.startswith("style_"):
+        findings = _extract_findings(result, "issues")
+        if findings:
+            for f in findings:
+                loc = f"{f.file}:{f.line}" if f.line else f.file
+                console.print(f"    [cyan]~[/cyan] {loc}  {f.description}")
 
 
 def render_report(report: ReviewReport, risk_level: str = "low") -> None:

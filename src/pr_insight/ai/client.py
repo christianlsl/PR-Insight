@@ -54,18 +54,29 @@ class AIClient:
         self._client = anthropic.AsyncAnthropic(**kwargs)
         self._model = model
 
-    async def _call(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
-        """Async API call with retry."""
+    async def _call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 4096,
+        on_stream: Callable[[str], None] | None = None,
+    ) -> str:
+        """Async streaming API call with retry."""
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
-                response = await self._client.messages.create(
+                collected: list[str] = []
+                async with self._client.messages.stream(
                     model=self._model,
                     max_tokens=max_tokens,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
-                )
-                return response.content[0].text
+                ) as stream:
+                    async for text in stream.text_stream:
+                        collected.append(text)
+                        if on_stream:
+                            on_stream(text)
+                return "".join(collected)
             except anthropic.RateLimitError as e:
                 last_error = e
                 delay = RETRY_BASE_DELAY * (2 ** attempt) * (1 + random.uniform(0, 0.5))
@@ -81,11 +92,15 @@ class AIClient:
                     raise
         raise RuntimeError(f"API call failed after {MAX_RETRIES} retries: {last_error}")
 
-    async def analyze(self, task: AnalysisTask) -> AnalysisResult:
+    async def analyze(
+        self,
+        task: AnalysisTask,
+        on_stream: Callable[[str], None] | None = None,
+    ) -> AnalysisResult:
         """Run a single analysis task asynchronously."""
         try:
             raw = await asyncio.wait_for(
-                self._call(task.system_prompt, task.user_prompt, task.max_tokens),
+                self._call(task.system_prompt, task.user_prompt, task.max_tokens, on_stream),
                 timeout=ANALYSIS_TIMEOUT,
             )
             from .parser import parse_json_response
@@ -100,13 +115,14 @@ class AIClient:
         self,
         tasks: list[AnalysisTask],
         on_task_done: Callable[[str], None] | None = None,
+        on_stream: Callable[[str], None] | None = None,
     ) -> list[AnalysisResult]:
         """Run multiple analysis tasks in parallel with concurrency control."""
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 
         async def _run(task: AnalysisTask) -> AnalysisResult:
             async with semaphore:
-                result = await self.analyze(task)
+                result = await self.analyze(task, on_stream=on_stream)
             if on_task_done is not None:
                 on_task_done(task.name)
             return result

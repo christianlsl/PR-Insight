@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 from . import __version__
 from .config import Config
@@ -147,39 +147,35 @@ def review(
     def _fetch_file(path: str, ref: str) -> str:
         return gh_client.get_file_content(owner, repo, path, ref)
 
+    task_durations: list[tuple[str, float]] = []
+    analysis_start = time.monotonic()
+
+    def _on_task_done(task_name: str) -> None:
+        elapsed = time.monotonic() - analysis_start
+        task_durations.append((task_name, elapsed))
+        label = _friendly_name(task_name)
+        console.print(f"  [green]✓[/green] {label:<24s} {elapsed:.1f}s")
+
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold green]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task_id = progress.add_task("Analyzing", total=None)
-
-            def _on_task_done(task_name: str) -> None:
-                progress.advance(task_id)
-                progress.update(task_id, description=f"Analyzing ({_friendly_name(task_name)})")
-
-            report = asyncio.run(analyze_pr(
-                pr_info=pr_info,
-                ai_client=ai_client,
-                language=language,
-                focus=focus,
-                no_context=no_context,
-                on_task_done=_on_task_done,
-                file_content_fetcher=_fetch_file if not no_context else None,
-            ))
-            progress.update(task_id, description="Analysis complete")
+        report = asyncio.run(analyze_pr(
+            pr_info=pr_info,
+            ai_client=ai_client,
+            language=language,
+            focus=focus,
+            no_context=no_context,
+            on_task_done=_on_task_done,
+            file_content_fetcher=_fetch_file if not no_context else None,
+        ))
     except Exception as e:
         console.print(f"[red]Analysis error:[/red] {e}")
         raise SystemExit(1)
 
+    total_time = time.monotonic() - analysis_start
+
     stats = report.stats
-    console.print(f"  Done! Found [red]{stats['high_risk']}[/red] high / "
-                  f"[yellow]{stats['medium_risk']}[/yellow] medium risks, "
-                  f"{stats['suggestions']} suggestions")
+    console.print(f"  [bold]Done![/bold] {stats['high_risk']} high / "
+                  f"{stats['medium_risk']} medium risks, "
+                  f"{stats['suggestions']} suggestions  ({total_time:.1f}s)")
 
     # Step 4: Output
     console.print("[bold blue]Step 4/4:[/bold blue] Generating output...")
