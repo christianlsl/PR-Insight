@@ -11,18 +11,21 @@ from dotenv import load_dotenv
 CONFIG_DIR = Path.home() / ".pr-insight"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
-# Supported models (all via Anthropic-compatible API)
+# Supported models. The provider determines which API shape is used.
 SUPPORTED_MODELS = {
     "claude-sonnet-4-20250514": "Claude Sonnet 4 (Anthropic 官方)",
     "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (Anthropic 官方)",
-    "deepseek-chat": "DeepSeek Chat (通过 Anthropic 接口)",
-    "deepseek-coder": "DeepSeek Coder (通过 Anthropic 接口)",
-    "mimo": "Mimo (通过 Anthropic 接口)",
+    "gpt-4o": "GPT-4o (OpenAI Chat Completions)",
+    "gpt-4o-mini": "GPT-4o mini (OpenAI Chat Completions)",
+    "deepseek-chat": "DeepSeek Chat (兼容 Anthropic 或 OpenAI 接口，取决于 provider/base_url)",
+    "deepseek-coder": "DeepSeek Coder (兼容 Anthropic 或 OpenAI 接口，取决于 provider/base_url)",
+    "mimo": "Mimo (兼容 Anthropic 或 OpenAI 接口，取决于 provider/base_url)",
 }
 
 DEFAULTS = {
+    "provider": "anthropic",  # anthropic or openai
     "model": "claude-sonnet-4-20250514",
-    "base_url": "",  # 自定义 API base URL，为空则使用 Anthropic 官方
+    "base_url": "",  # 自定义 API base URL，为空则使用 provider 官方默认
     "language": "zh",
     "risk_level": "low",
     "output": "terminal",
@@ -76,13 +79,38 @@ class Config:
 
     @property
     def anthropic_key(self) -> str:
-        key = self.get("anthropic_key") or self.get("API_KEY")
+        key = self.get("anthropic_key") or self.get("ANTHROPIC_API_KEY") or self.get("api_key") or self.get("API_KEY")
         if not key:
             raise ValueError(
                 "API key not configured. "
                 "Set API_KEY env var or run: pr-insight config set anthropic_key <key>"
             )
         return key
+
+    @property
+    def openai_key(self) -> str:
+        key = self.get("openai_key") or self.get("OPENAI_API_KEY") or self.get("api_key") or self.get("API_KEY")
+        if not key:
+            raise ValueError(
+                "OpenAI API key not configured. "
+                "Set OPENAI_API_KEY env var or run: pr-insight config set openai_key <key>"
+            )
+        return key
+
+    @property
+    def provider(self) -> str:
+        return (self.get("provider") or DEFAULTS["provider"]).lower()
+
+    @property
+    def api_key(self) -> str:
+        if self.provider == "openai":
+            return self.openai_key
+        if self.provider == "anthropic":
+            return self.anthropic_key
+        raise ValueError(
+            f"Unsupported provider '{self.provider}'. "
+            "Use 'anthropic' or 'openai'."
+        )
 
     @property
     def model(self) -> str:
@@ -117,7 +145,7 @@ class Config:
         """Return all effective config values (masks sensitive keys)."""
         result = dict(DEFAULTS)
         result.update(self._file_config)
-        for sensitive in ("github_token", "anthropic_key"):
+        for sensitive in ("github_token", "anthropic_key", "openai_key", "api_key"):
             val = result.get(sensitive)
             if val:
                 result[sensitive] = val[:8] + "..." if len(val) > 8 else "***"

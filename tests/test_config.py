@@ -22,6 +22,7 @@ class TestConfig:
 
     def test_default_values(self):
         cfg = self._make_config()
+        assert cfg.provider == DEFAULTS["provider"]
         assert cfg.model == DEFAULTS["model"]
         assert cfg.language == DEFAULTS["language"]
         assert cfg.risk_level == DEFAULTS["risk_level"]
@@ -51,6 +52,30 @@ class TestConfig:
         with pytest.raises(ValueError, match="API key not configured"):
             _ = cfg.anthropic_key
 
+    def test_openai_key_raises_when_missing(self):
+        cfg = self._make_config(file_config={"provider": "openai"})
+        with pytest.raises(ValueError, match="OpenAI API key not configured"):
+            _ = cfg.openai_key
+
+    def test_api_key_uses_openai_key_for_openai_provider(self):
+        cfg = self._make_config(file_config={
+            "provider": "openai",
+            "openai_key": "sk-openai",
+            "anthropic_key": "sk-anthropic",
+        })
+        assert cfg.api_key == "sk-openai"
+
+    def test_api_key_uses_anthropic_key_by_default(self):
+        cfg = self._make_config(file_config={
+            "anthropic_key": "sk-anthropic",
+            "openai_key": "sk-openai",
+        })
+        assert cfg.api_key == "sk-anthropic"
+
+    def test_provider_from_env_is_lowercased(self):
+        cfg = self._make_config(env_vars={"PR_INSIGHT_PROVIDER": "OpenAI"})
+        assert cfg.provider == "openai"
+
     def test_base_url_empty_by_default(self):
         cfg = self._make_config()
         assert cfg.base_url == ""
@@ -63,10 +88,12 @@ class TestConfig:
         cfg = self._make_config(file_config={
             "github_token": "ghp_1234567890abcdef",
             "anthropic_key": "sk-ant-12345678",
+            "openai_key": "sk-openai-12345678",
         })
         shown = cfg.show()
         assert shown["github_token"].startswith("ghp_1234")
         assert shown["anthropic_key"].startswith("sk-ant-1")
+        assert shown["openai_key"].startswith("sk-opena")
 
     def test_set_saves_to_file_config(self):
         cfg = self._make_config()
@@ -76,6 +103,7 @@ class TestConfig:
     def test_supported_models_not_empty(self):
         assert len(SUPPORTED_MODELS) > 0
         assert "claude-sonnet-4-20250514" in SUPPORTED_MODELS
+        assert "gpt-4o" in SUPPORTED_MODELS
 
     def test_unset_existing_key(self):
         cfg = self._make_config(file_config={"model": "mimo"})

@@ -112,11 +112,10 @@ def render_report(report: ReviewReport, risk_level: str = "low") -> None:
     stats = report.stats
     console.print(
         f"\n[bold]Found:[/bold] "
-        f"[red]{stats['high_risk']} high[/red] / "
-        f"[yellow]{stats['medium_risk']} medium[/yellow] / "
-        f"[cyan]{stats['risks']} total risks[/cyan] | "
-        f"{stats['suggestions']} suggestions | "
-        f"{stats['style_issues']} style issues"
+        f"[red]Risk {stats['risks']}[/red] "
+        f"({stats['high_risk']} high / {stats['medium_risk']} medium) | "
+        f"[blue]Review {stats['suggestions']}[/blue] | "
+        f"[cyan]Style {stats['style_issues']}[/cyan]"
     )
 
     # Summary
@@ -124,15 +123,15 @@ def render_report(report: ReviewReport, risk_level: str = "low") -> None:
 
     # Risks (filtered by level)
     risks = [r for r in report.risks if _should_show(r.severity, risk_level)]
-    _render_findings_table(risks, "Risks & Issues", "red")
+    _render_findings_table(risks, "Risk", "red")
 
     # Suggestions
     suggestions = [s for s in report.suggestions if _should_show(s.severity, risk_level)]
-    _render_findings_table(suggestions, "Improvement Suggestions", "blue")
+    _render_findings_table(suggestions, "Review", "blue")
 
     # Style issues
     style = [s for s in report.style_issues if _should_show(s.severity, risk_level)]
-    _render_findings_table(style, "Style Issues", "cyan")
+    _render_findings_table(style, "Style", "cyan")
 
     # Errors
     _render_errors(report.errors)
