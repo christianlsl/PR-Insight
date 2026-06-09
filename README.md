@@ -8,8 +8,10 @@ AI 代码评审工具，帮助开发者提升 Pull Request 的 Review 效率与�
 - **风险识别** — 检测安全漏洞、性能问题、并发风险、资源泄漏等
 - **Review 建议** — 提供可操作的代码改进方案，附带示例代码
 - **风格检查** — 识别反模式、重复代码、魔法数字等问题
-- **多模型支持** — Claude、DeepSeek、Mimo 等，统一走 Anthropic 兼容接口
-- **多格式输出** — 终端彩色报告、可分享的 HTML 报告、GitHub PR 评论
+- **多模型接口** — 支持 Anthropic Messages API 与 OpenAI Chat Completions API
+- **代码查看** — HTML 报告内可查看问题对应的原始代码、修改后代码和 PR Diff
+- **多格式输出** — 终端彩色报告、可分享的 HTML 报告、JSON 报告、GitHub PR 评论
+- **容错解析** — 自动提取模型返回中的 JSON，并兼容常见非严格 JSON 输出
 
 ## 功能演示
 
@@ -77,8 +79,11 @@ pr-insight review https://github.com/owner/repo/pull/123
 # 生成 HTML 报告 + 发布 PR 评论
 pr-insight review https://github.com/owner/repo/pull/123 -o terminal,html,comment
 
-# 聚焦安全问题，只显示中高风险
+# 聚焦安全问题，只显示中高风险（终端和 HTML 输出均会应用过滤）
 pr-insight review https://github.com/owner/repo/pull/123 -f security -r medium
+
+# 只分析代码质量 / Style 问题
+pr-insight review https://github.com/owner/repo/pull/123 -f style
 
 # 查看分块计划（不调用 AI）
 pr-insight review https://github.com/owner/repo/pull/123 --dry-run
@@ -93,16 +98,16 @@ pr-insight review owner/repo#123
 
 分析指定 GitHub PR。
 
-| 选项               | 说明                                           | 默认值        |
-| ------------------ | ---------------------------------------------- | ------------- |
-| `-o, --output`     | 输出格式：terminal, html, comment（逗号分隔）  | terminal,html |
-| `--output-dir`     | HTML 报告保存目录                              | ./reports     |
-| `-r, --risk-level` | 最低显示风险级别：low / medium / high          | low           |
-| `-l, --language`   | 报告语言：zh / en                              | zh            |
-| `-f, --focus`      | 分析重点：security / performance / style / all | all           |
-| `--no-context`     | 跳过上下文代码获取（更快但分析较浅）           | false         |
-| `--dry-run`        | 仅展示分块计划，不执行 AI 分析                 | false         |
-| `-v, --verbose`    | 开启详细日志                                   | false         |
+| 选项               | 说明                                                    | 默认值        |
+| ------------------ | ------------------------------------------------------- | ------------- |
+| `-o, --output`     | 输出格式：terminal, html, comment（逗号分隔）           | terminal,html |
+| `--output-dir`     | HTML 报告保存目录                                       | ./reports     |
+| `-r, --risk-level` | 最低显示级别：low / medium / high，影响终端和 HTML 展示 | low           |
+| `-l, --language`   | 报告语言：zh / en                                       | zh            |
+| `-f, --focus`      | 分析重点：security / performance / style / all          | all           |
+| `--no-context`     | 跳过上下文代码获取（更快但分析较浅）                    | false         |
+| `--dry-run`        | 仅展示分块计划，不执行 AI 分析                          | false         |
+| `-v, --verbose`    | 开启详细日志                                            | false         |
 
 ### `pr-insight config`
 
@@ -147,14 +152,14 @@ pr-insight config set base_url https://api.deepseek.com/v1
 │ 2 files, +20/-10                 │
 ╰──────────────────────────────────╯
 
-Found: 1 high / 1 medium / 2 total risks | 1 suggestions | 0 style issues
+Found: Risk 2 (1 high / 1 medium) | Review 1 | Style 0
 
 ┌─ Summary ────────────────────────┐
 │ Purpose: Fix SQL injection bug   │
 │ Impact:  core module             │
 └──────────────────────────────────┘
 
-┌─ Risks & Issues ─────────────────────────────────────────┐
+┌─ Risk ───────────────────────────────────────────────────┐
 │ Severity │ File        │ Line │ Description    │ Suggestion│
 │ !! HIGH  │ src/main.py │ 10   │ SQL injection  │ Use params│
 │ ! MEDIUM │ src/main.py │ 20   │ unused var     │ remove    │
@@ -163,7 +168,17 @@ Found: 1 high / 1 medium / 2 total risks | 1 suggestions | 0 style issues
 
 ### HTML 报告
 
-生成独立的 HTML 文件，包含统计卡片、分类表格，响应式设计适配桌面和移动端。
+生成独立的 HTML 文件，包含 Risk / Review / Style 三维度统计卡片、分类表格和代码查看弹窗。每条问题右侧都有 `View` 按钮，可查看：
+
+- **原始代码**：从 PR patch 还原的变更前片段
+- **修改后代码**：从 PR patch 还原的变更后片段
+- **PR Diff**：完整 unified diff，并对新增、删除、hunk 行做基础高亮
+
+HTML 报告会遵循 `-r, --risk-level` 过滤规则，例如 `-r medium` 会隐藏 low 级别的 Risk / Review / Style 项。
+
+### JSON 报告
+
+通过 `-o json` 输出结构化 JSON 报告，便于后续接入 CI、脚本或质量统计系统。
 
 ### GitHub PR 评论
 
@@ -175,10 +190,10 @@ Found: 1 high / 1 medium / 2 total risks | 1 suggestions | 0 style issues
 
 系统通过 `provider` 配置选择模型接口：
 
-| Provider  | 接口形态                              | 默认 base_url                  |
-| --------- | ------------------------------------- | ------------------------------ |
-| anthropic | Anthropic Messages API                 | Anthropic 官方                 |
-| openai    | OpenAI Chat Completions API            | `https://api.openai.com/v1`    |
+| Provider  | 接口形态                    | 默认 base_url               |
+| --------- | --------------------------- | --------------------------- |
+| anthropic | Anthropic Messages API      | Anthropic 官方              |
+| openai    | OpenAI Chat Completions API | `https://api.openai.com/v1` |
 
 `base_url` 为空时使用 provider 官方默认地址；配置后可接入对应协议的第三方兼容服务。
 
@@ -208,6 +223,15 @@ pr-insight config set base_url https://api.deepseek.com/v1
 只要模型端点兼容 Anthropic Messages API 或 OpenAI Chat Completions API，就可以接入。未来新增模型只需在 `config.py` 的 `SUPPORTED_MODELS` 中注册即可。
 
 **容错设计**：`AIClient` 内置指数退避重试（最多 3 次）、并发控制（信号量限制为 3 个并行请求）、300 秒超时，以及 extended thinking 场景下的 ThinkingBlock 降级提取。
+
+### 结构化响应解析：严格 JSON + 容错提取
+
+模型有时会在 JSON 前后输出解释文本，或返回带有尾逗号、单引号、未转义换行的非严格 JSON。`parser.py` 会按以下顺序解析：
+
+1. 直接解析完整响应
+2. 提取 Markdown code block 中的 JSON
+3. 在完整文本中扫描括号配平的 JSON 片段
+4. 对常见非严格 JSON 做保守修复并兜底解析
 
 ### 上下文获取：分块 + 上下文注入
 
@@ -255,6 +279,16 @@ pr-insight review <URL> --dry-run
 所有任务通过 `asyncio.Semaphore` 控制并发（默认 3 个并行 API 调用），在速度和 API 限流之间取得平衡。结果合并时自动去重（相同文件 + 行号 + 描述）。
 
 Prompt 中明确要求 AI **不报告**琐碎问题（空白变更、import 重排、框架惯例、测试 mock 等），聚焦于真正有价值的发现。
+
+### 输出过滤：统一应用最低级别
+
+`-r, --risk-level` 用于控制报告展示的最低严重级别：
+
+```bash
+pr-insight review https://github.com/pallets/flask/pull/5918 -r medium
+```
+
+当设置为 `medium` 时，终端和 HTML 报告都会隐藏 `low` 级别的 Risk / Review / Style 条目；HTML 统计卡片也会按过滤后的结果重新计算。
 
 ## 项目结构
 
