@@ -37,8 +37,13 @@ pip install -e ".[dev]"
 # GitHub Token（需要 repo 权限）
 pr-insight config set github_token ghp_xxxxxxxxxxxx
 
-# AI API Key
+# AI Provider（默认 anthropic，可选 openai）
+pr-insight config set provider anthropic
 pr-insight config set anthropic_key sk-ant-xxxxxxxxxxxx
+
+# 或使用 OpenAI / OpenAI-compatible 接口
+pr-insight config set provider openai
+pr-insight config set openai_key sk-xxxxxxxxxxxx
 
 # 可选：设置模型和自定义 API 地址
 pr-insight config set model mimo-v2.5-pro
@@ -49,7 +54,11 @@ pr-insight config set base_url https://token-plan-cn.xiaomimimo.com/anthropic
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxx
-export API_KEY=sk-ant-xxxx
+export API_KEY=sk-xxxx
+# 或分别设置
+export ANTHROPIC_API_KEY=sk-ant-xxxx
+export OPENAI_API_KEY=sk-xxxx
+export PR_INSIGHT_PROVIDER=openai
 export BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic
 ```
 
@@ -109,11 +118,22 @@ pr-insight config models             # 列出支持的模型
 
 ## 支持的模型
 
-默认使用 Claude Sonnet。如使用国产模型需配置 `base_url`，符合 Anthropic 接口要求：
+默认使用 Claude Sonnet，通过 Anthropic Messages API。也可以切换到 OpenAI Chat Completions API 或兼容接口。
 
 ```bash
-pr-insight config set model mimo
-pr-insight config set base_url https://token-plan-cn.xiaomimimo.com/anthropic
+# Anthropic（默认）
+pr-insight config set provider anthropic
+pr-insight config set model claude-sonnet-4-20250514
+
+# OpenAI 官方
+pr-insight config set provider openai
+pr-insight config set openai_key sk-xxxx
+pr-insight config set model gpt-4o
+
+# OpenAI-compatible 服务
+pr-insight config set provider openai
+pr-insight config set model deepseek-chat
+pr-insight config set base_url https://api.deepseek.com/v1
 ```
 
 ## 输出示例
@@ -151,32 +171,41 @@ Found: 1 high / 1 medium / 2 total risks | 1 suggestions | 0 style issues
 
 ## 设计思路
 
-### 模型选择：统一 Anthropic 兼容接口
+### 模型接口：兼容 Anthropic 与 OpenAI
 
-系统**不直接对接各家 LLM 的原生 API**，而是统一使用 Anthropic Messages API 格式。这是本工具最核心的架构决策。
+系统通过 `provider` 配置选择模型接口：
 
-**为什么这样做？**
+| Provider  | 接口形态                              | 默认 base_url                  |
+| --------- | ------------------------------------- | ------------------------------ |
+| anthropic | Anthropic Messages API                 | Anthropic 官方                 |
+| openai    | OpenAI Chat Completions API            | `https://api.openai.com/v1`    |
 
-- Anthropic SDK 的 `messages.create()` 接口语义清晰（system + messages + max_tokens），且原生支持 extended thinking，适合作为"标准接口"
-- DeepSeek、Mimo 等国产模型均提供 Anthropic 兼容端点（`/anthropic` 路径），只需配置 `base_url` 即可切换，无需改动任何代码
-- 避免为每家模型写适配层——一个 `AIClient` + 一个 `base_url` 参数覆盖所有场景
+`base_url` 为空时使用 provider 官方默认地址；配置后可接入对应协议的第三方兼容服务。
 
 **如何切换模型？**
 
 ```bash
 # 使用 Claude（默认，无需 base_url）
+pr-insight config set provider anthropic
 pr-insight config set model claude-sonnet-4-20250514
 
-# 使用 Mimo
+# 使用 OpenAI
+pr-insight config set provider openai
+pr-insight config set openai_key sk-xxxx
+pr-insight config set model gpt-4o
+
+# 使用 Mimo（Anthropic-compatible）
+pr-insight config set provider anthropic
 pr-insight config set model mimo
 pr-insight config set base_url https://token-plan-cn.xiaomimimo.com/anthropic
 
-# 使用 DeepSeek
+# 使用 DeepSeek（OpenAI-compatible）
+pr-insight config set provider openai
 pr-insight config set model deepseek-chat
-pr-insight config set base_url https://api.deepseek.com/anthropic
+pr-insight config set base_url https://api.deepseek.com/v1
 ```
 
-只要模型端点兼容 Anthropic Messages API，就可以接入。未来新增模型只需在 `config.py` 的 `SUPPORTED_MODELS` 中注册即可。
+只要模型端点兼容 Anthropic Messages API 或 OpenAI Chat Completions API，就可以接入。未来新增模型只需在 `config.py` 的 `SUPPORTED_MODELS` 中注册即可。
 
 **容错设计**：`AIClient` 内置指数退避重试（最多 3 次）、并发控制（信号量限制为 3 个并行请求）、300 秒超时，以及 extended thinking 场景下的 ThinkingBlock 降级提取。
 
@@ -188,11 +217,11 @@ PR 的 diff 只展示变更行，缺少周围的代码上下文，AI 难以理�
 
 大 PR 无法一次性送入 AI 的上下文窗口，需要分块处理：
 
-| PR 规模 | 策略 |
-|---------|------|
-| 小型（< 20 文件，< 500 行变更） | 单块，直接分析 |
-| 中型（20-100 文件） | 按目录分组，每块最多 15 个文件或 80K 字符 |
-| 大型（> 100 文件） | 先生成文件列表摘要块，再按目录分组 |
+| PR 规模                         | 策略                                      |
+| ------------------------------- | ----------------------------------------- |
+| 小型（< 20 文件，< 500 行变更） | 单块，直接分析                            |
+| 中型（20-100 文件）             | 按目录分组，每块最多 15 个文件或 80K 字符 |
+| 大型（> 100 文件）              | 先生成文件列表摘要块，再按目录分组        |
 
 分块时按目录排序，让同一模块的文件落在同一个 chunk 中，AI 能更好地理解模块内的关联。
 
@@ -216,12 +245,12 @@ pr-insight review <URL> --dry-run
 
 系统将代码审查拆分为四个独立维度，每个维度对每个 chunk 生成一个 AI 任务：
 
-| 维度 | 关注点 | 输出 |
-|------|--------|------|
-| Summary | PR 目的、影响范围、技术要点、风险区域 | 结构化摘要 |
-| Risk | 安全漏洞、性能问题、并发风险、资源泄漏、逻辑错误 | 严重级别 + 置信度 + 修复建议 |
-| Review | 可读性、设计模式、测试覆盖、API 设计 | 改进建议 + 示例代码 |
-| Style | 反模式、重复代码、过长函数、魔法数字、复杂条件 | 问题描述 + 改进建议 |
+| 维度    | 关注点                                           | 输出                         |
+| ------- | ------------------------------------------------ | ---------------------------- |
+| Summary | PR 目的、影响范围、技术要点、风险区域            | 结构化摘要                   |
+| Risk    | 安全漏洞、性能问题、并发风险、资源泄漏、逻辑错误 | 严重级别 + 置信度 + 修复建议 |
+| Review  | 可读性、设计模式、测试覆盖、API 设计             | 改进建议 + 示例代码          |
+| Style   | 反模式、重复代码、过长函数、魔法数字、复杂条件   | 问题描述 + 改进建议          |
 
 所有任务通过 `asyncio.Semaphore` 控制并发（默认 3 个并行 API 调用），在速度和 API 限流之间取得平衡。结果合并时自动去重（相同文件 + 行号 + 描述）。
 

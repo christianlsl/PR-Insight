@@ -88,17 +88,19 @@ def review(
     cfg = Config()
     try:
         gh_token = cfg.github_token
-        ai_key = cfg.anthropic_key
+        ai_key = cfg.api_key
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise SystemExit(1)
 
+    provider = cfg.provider
     model = cfg.model
     base_url = cfg.base_url or None
 
     console.print(Panel(
         f"[bold]PR-Insight v{__version__}[/bold]\n"
         f"Analyzing: [cyan]{owner}/{repo}#{number}[/cyan]\n"
+        f"Provider: {provider}\n"
         f"Model: {model}",
         title="Starting Review",
         border_style="blue",
@@ -142,7 +144,7 @@ def review(
 
     # Step 3: AI Analysis
     console.print("[bold blue]Step 3/4:[/bold blue] Running AI analysis...")
-    ai_client = AIClient(api_key=ai_key, model=model, base_url=base_url)
+    ai_client = AIClient(api_key=ai_key, model=model, base_url=base_url, provider=provider)
 
     def _fetch_file(path: str, ref: str) -> str:
         return gh_client.get_file_content(owner, repo, path, ref)
@@ -258,15 +260,21 @@ def config_init() -> None:
     if github_token:
         cfg.set("github_token", github_token)
 
-    anthropic_key = input(f"API Key [{_mask(cfg.get('anthropic_key'))}]: ").strip()
-    if anthropic_key:
-        cfg.set("anthropic_key", anthropic_key)
+    provider = input(f"Provider (anthropic/openai) [{cfg.provider}]: ").strip().lower()
+    if provider:
+        cfg.set("provider", provider)
+    provider = provider or cfg.provider
+
+    key_name = "openai_key" if provider == "openai" else "anthropic_key"
+    api_key = input(f"API Key ({key_name}) [{_mask(cfg.get(key_name))}]: ").strip()
+    if api_key:
+        cfg.set(key_name, api_key)
 
     model = input(f"Model [{cfg.model}]: ").strip()
     if model:
         cfg.set("model", model)
 
-    base_url = input(f"Base URL [{cfg.base_url or 'default (Anthropic)'}]: ").strip()
+    base_url = input(f"Base URL [{cfg.base_url or f'default ({provider})'}]: ").strip()
     if base_url:
         cfg.set("base_url", base_url)
 

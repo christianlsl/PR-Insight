@@ -29,6 +29,36 @@ class TestParseJsonResponse:
         result = parse_json_response(text)
         assert result == {"key": "value"}
 
+    def test_json_with_reasoning_prefers_task_payload(self):
+        text = (
+            '先分析一个示例：{"title": "towel", "size": "XL"}。\n'
+            "最终结果：\n"
+            '{"issues": [{"file": "main.py", "line": "10", '
+            '"description": "Bare `except Exception: pass` silently swallows errors", '
+            '"suggestion": "Catch a specific exception"}]}'
+        )
+        result = parse_json_response(text)
+        assert result["issues"][0]["file"] == "main.py"
+
+    def test_json_code_block_with_spaced_uppercase_language(self):
+        text = '``` JSON\n{"issues": []}\n```'
+        result = parse_json_response(text)
+        assert result == {"issues": []}
+
+    def test_balanced_json_ignores_braces_inside_strings(self):
+        text = (
+            "Here is the JSON:\n"
+            '{"issues": [{"description": "body changed from {\\"a\\": 1} to raw text", '
+            '"suggestion": "Keep `{}` examples inside strings parseable"}]}'
+        )
+        result = parse_json_response(text)
+        assert result["issues"][0]["description"].startswith("body changed")
+
+    def test_prefers_parent_task_payload_over_nested_empty_array(self):
+        text = '先看示例 {"x": 1}\n最终 {"issues": []}'
+        result = parse_json_response(text)
+        assert result == {"issues": []}
+
     def test_json_array(self):
         text = '[1, 2, 3]'
         result = parse_json_response(text)
@@ -67,6 +97,23 @@ class TestAIClient:
         AIClient(api_key="test-key")
 
         mock_anthropic_cls.assert_called_once_with(api_key="test-key")
+
+    @patch("pr_insight.ai.client.httpx.AsyncClient")
+    def test_init_openai_provider(self, mock_httpx_cls):
+        from pr_insight.ai.client import AIClient
+
+        AIClient(api_key="test-key", model="gpt-4o", provider="openai")
+
+        mock_httpx_cls.assert_called_once()
+        kwargs = mock_httpx_cls.call_args.kwargs
+        assert str(kwargs["base_url"]) == "https://api.openai.com/v1"
+        assert kwargs["headers"]["Authorization"] == "Bearer test-key"
+
+    def test_init_unsupported_provider(self):
+        from pr_insight.ai.client import AIClient
+
+        with pytest.raises(ValueError, match="Unsupported AI provider"):
+            AIClient(api_key="test-key", provider="unknown")
 
     @patch("pr_insight.ai.client.anthropic.AsyncAnthropic")
     async def test_call_success(self, mock_anthropic_cls):
@@ -114,3 +161,34 @@ class TestAIClient:
         assert result == '{"ok": true}'
         assert mock_client.messages.create.call_count == 2
         mock_sleep.assert_called_once()
+
+    @patch("pr_insight.ai.client.httpx.AsyncClient")
+    async def test_call_openai_success(self, mock_httpx_cls):
+        from pr_insight.ai.client import AIClient
+
+        mock_http = MagicMock()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [
+                {"message": {"content": '{"result": "ok"}'}}
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_httpx_cls.return_value = mock_http
+
+        ai = AIClient(api_key="test-key", model="gpt-4o", provider="openai")
+        result = await ai._call("system", "user", max_tokens=123)
+
+        assert result == '{"result": "ok"}'
+        mock_http.post.assert_called_once_with(
+            "/chat/completions",
+            json={
+                "model": "gpt-4o",
+                "messages": [
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                "max_tokens": 123,
+            },
+        )

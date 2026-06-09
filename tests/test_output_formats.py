@@ -25,6 +25,9 @@ def _make_report() -> ReviewReport:
     report.suggestions = [
         ReviewFinding(file="src/main.py", line="15", severity="low", description="rename", suggestion="better name"),
     ]
+    report.style_issues = [
+        ReviewFinding(file="src/main.py", line="25", category="duplication", description="duplicate branch", suggestion="extract helper"),
+    ]
     return report
 
 
@@ -35,8 +38,9 @@ class TestFormatReviewComment:
 
     def test_contains_stats(self):
         md = format_review_comment(_make_report())
-        assert "High Risk" in md
-        assert "Medium Risk" in md
+        assert "| Risk | 2 (1 high / 1 medium) |" in md
+        assert "| Review | 1 |" in md
+        assert "| Style | 1 |" in md
 
     def test_contains_risks(self):
         md = format_review_comment(_make_report())
@@ -45,6 +49,10 @@ class TestFormatReviewComment:
     def test_contains_suggestions(self):
         md = format_review_comment(_make_report())
         assert "rename" in md
+
+    def test_contains_style_issues(self):
+        md = format_review_comment(_make_report())
+        assert "duplicate branch" in md
 
     def test_contains_footer(self):
         md = format_review_comment(_make_report())
@@ -78,6 +86,9 @@ class TestGenerateHtmlReport:
         content = result.read_text()
         assert "Fix critical bug" in content
         assert "SQL injection" in content
+        assert "<div class=\"label\">Risk</div>" in content
+        assert "<div class=\"label\">Review</div>" in content
+        assert "<div class=\"label\">Style</div>" in content
 
     def test_creates_parent_dirs(self, tmp_path):
         report = _make_report()

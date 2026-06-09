@@ -35,15 +35,14 @@ def format_review_comment(report: ReviewReport) -> str:
     lines.append("")
     lines.append(f"| Category | Count |")
     lines.append(f"|----------|-------|")
-    lines.append(f"| High Risk | {stats['high_risk']} |")
-    lines.append(f"| Medium Risk | {stats['medium_risk']} |")
-    lines.append(f"| Suggestions | {stats['suggestions']} |")
-    lines.append(f"| Style Issues | {stats['style_issues']} |")
+    lines.append(f"| Risk | {stats['risks']} ({stats['high_risk']} high / {stats['medium_risk']} medium) |")
+    lines.append(f"| Review | {stats['suggestions']} |")
+    lines.append(f"| Style | {stats['style_issues']} |")
     lines.append("")
 
     # Top risks (limit to 10)
     if report.risks:
-        lines.append("### Top Risks")
+        lines.append("### Risk")
         lines.append("")
         for r in report.risks[:10]:
             icon = {"high": "!!", "medium": "!", "low": "i"}.get(r.severity, "?")
@@ -55,9 +54,19 @@ def format_review_comment(report: ReviewReport) -> str:
 
     # Top suggestions (limit to 5)
     if report.suggestions:
-        lines.append("### Improvement Suggestions")
+        lines.append("### Review")
         lines.append("")
         for s in report.suggestions[:5]:
+            location = f"`{s.file}:{s.line}`" if s.file else ""
+            lines.append(f"- {s.description} {location}")
+            if s.suggestion:
+                lines.append(f"  - {s.suggestion}")
+        lines.append("")
+
+    if report.style_issues:
+        lines.append("### Style")
+        lines.append("")
+        for s in report.style_issues[:5]:
             location = f"`{s.file}:{s.line}`" if s.file else ""
             lines.append(f"- {s.description} {location}")
             if s.suggestion:

@@ -15,9 +15,9 @@
         .stat-card { background: white; padding: 16px 20px; border-radius: 8px; flex: 1; min-width: 120px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .stat-card .number { font-size: 1.8em; font-weight: bold; }
         .stat-card .label { font-size: 0.85em; color: #666; }
-        .high .number { color: #e53e3e; }
-        .medium .number { color: #dd6b20; }
-        .suggestions .number { color: #3182ce; }
+        .stat-card .hint { font-size: 0.75em; color: #718096; margin-top: 4px; }
+        .risk .number { color: #e53e3e; }
+        .review .number { color: #3182ce; }
         .style .number { color: #805ad5; }
         section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         section h2 { font-size: 1.1em; margin-bottom: 12px; color: #2d3748; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
@@ -63,21 +63,18 @@
         </header>
 
         <div class="stats">
-            <div class="stat-card high">
-                <div class="number">{{ stats.high_risk }}</div>
-                <div class="label">High Risk</div>
+            <div class="stat-card risk">
+                <div class="number">{{ stats.risks }}</div>
+                <div class="label">Risk</div>
+                <div class="hint">{{ stats.high_risk }} high / {{ stats.medium_risk }} medium</div>
             </div>
-            <div class="stat-card medium">
-                <div class="number">{{ stats.medium_risk }}</div>
-                <div class="label">Medium Risk</div>
-            </div>
-            <div class="stat-card suggestions">
+            <div class="stat-card review">
                 <div class="number">{{ stats.suggestions }}</div>
-                <div class="label">Suggestions</div>
+                <div class="label">Review</div>
             </div>
             <div class="stat-card style">
                 <div class="number">{{ stats.style_issues }}</div>
-                <div class="label">Style Issues</div>
+                <div class="label">Style</div>
             </div>
         </div>
 
@@ -85,9 +82,9 @@
             <h3>Table of Contents</h3>
             <ul>
                 {% if summary %}<li><a href="#summary">Summary</a></li>{% endif %}
-                {% if risks %}<li><a href="#risks">Risks &amp; Issues ({{ risks|length }})</a></li>{% endif %}
-                {% if suggestions %}<li><a href="#suggestions">Improvement Suggestions ({{ suggestions|length }})</a></li>{% endif %}
-                {% if style_issues %}<li><a href="#style">Style Issues ({{ style_issues|length }})</a></li>{% endif %}
+                {% if risks %}<li><a href="#risks">Risk ({{ risks|length }})</a></li>{% endif %}
+                {% if suggestions %}<li><a href="#suggestions">Review ({{ suggestions|length }})</a></li>{% endif %}
+                {% if style_issues %}<li><a href="#style">Style ({{ style_issues|length }})</a></li>{% endif %}
                 {% if errors %}<li><a href="#errors">Analysis Errors</a></li>{% endif %}
             </ul>
         </nav>
@@ -107,7 +104,7 @@
 
         {% if risks %}
         <section id="risks">
-            <h2>Risks &amp; Issues</h2>
+            <h2>Risk</h2>
             <table>
                 <thead><tr><th>Severity</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th></tr></thead>
                 <tbody>
@@ -127,7 +124,7 @@
 
         {% if suggestions %}
         <section id="suggestions">
-            <h2>Improvement Suggestions</h2>
+            <h2>Review</h2>
             <table>
                 <thead><tr><th>Priority</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th></tr></thead>
                 <tbody>
@@ -147,7 +144,7 @@
 
         {% if style_issues %}
         <section id="style">
-            <h2>Style Issues</h2>
+            <h2>Style</h2>
             <table>
                 <thead><tr><th>Type</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th></tr></thead>
                 <tbody>
