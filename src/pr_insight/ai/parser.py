@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from typing import Any
@@ -76,12 +77,43 @@ def _iter_balanced_json_candidates(text: str) -> list[str]:
     return candidates
 
 
+def _repair_json_candidate(candidate: str) -> str:
+    """Apply conservative repairs for common model-produced JSON variants."""
+    repaired = candidate.strip()
+    repaired = repaired.replace("\ufeff", "")
+    repaired = repaired.replace("“", '"').replace("”", '"')
+    repaired = repaired.replace("‘", "'").replace("’", "'")
+    repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+    return repaired
+
+
+def _decode_json_candidate(candidate: str) -> Any:
+    """Decode strict JSON first, then common relaxed variants."""
+    repaired = _repair_json_candidate(candidate)
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        return json.JSONDecoder(strict=False).decode(repaired)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        return ast.literal_eval(repaired)
+    except (SyntaxError, ValueError, TypeError):
+        pass
+
+    raise json.JSONDecodeError("Could not decode JSON candidate", repaired, 0)
+
+
 def _decode_best_candidate(candidates: list[str]) -> Any | None:
     """Decode candidates, preferring payloads shaped like PR-Insight results."""
     decoded: list[Any] = []
     for candidate in candidates:
         try:
-            value = json.loads(candidate.strip())
+            value = _decode_json_candidate(candidate)
         except json.JSONDecodeError:
             continue
         if _looks_like_task_payload(value):
@@ -102,7 +134,7 @@ def parse_json_response(text: str) -> Any:
     # Try direct parse first
     text = text.strip()
     try:
-        return json.loads(text)
+        return _decode_json_candidate(text)
     except json.JSONDecodeError:
         pass
 

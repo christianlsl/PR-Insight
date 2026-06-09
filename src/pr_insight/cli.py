@@ -192,7 +192,7 @@ def review(
     if "html" in outputs:
         from .output.html_report import generate_html_report
         out_path = Path(output_dir) / f"pr-{number}-review.html"
-        generate_html_report(report, out_path)
+        generate_html_report(report, out_path, risk_level)
         console.print(f"  HTML report: [green]{out_path}[/green]")
 
     if "comment" in outputs:

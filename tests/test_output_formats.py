@@ -117,3 +117,16 @@ class TestGenerateHtmlReport:
         assert "<!DOCTYPE html>" in content
         assert "<table>" in content
         assert "PR-Insight" in content
+
+    def test_html_respects_risk_level_filter(self, tmp_path):
+        report = _make_report()
+        out = tmp_path / "report.html"
+        content = generate_html_report(report, out, risk_level="medium").read_text()
+        assert "SQL injection" in content
+        assert "unused var" in content
+        assert "rename" not in content
+        assert "duplicate branch" not in content
+        assert "<div class=\"number\">2</div>" in content
+        assert "<div class=\"label\">Risk</div>" in content
+        assert "<div class=\"number\">0</div>" in content
+        assert "<div class=\"label\">Review</div>" in content

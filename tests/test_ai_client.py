@@ -59,6 +59,26 @@ class TestParseJsonResponse:
         result = parse_json_response(text)
         assert result == {"issues": []}
 
+    def test_json_with_unescaped_newline_in_string(self):
+        text = (
+            '```json\n'
+            '{"issues": [{"file": "main.py", '
+            '"description": "first line\nsecond line", '
+            '"suggestion": "extract helper"}]}\n'
+            '```'
+        )
+        result = parse_json_response(text)
+        assert result["issues"][0]["description"] == "first line\nsecond line"
+
+    def test_python_literal_response_with_trailing_comma(self):
+        text = (
+            "Result:\n"
+            "{'issues': [{'file': 'main.py', 'line': '10', "
+            "'description': 'duplicate branch', 'suggestion': 'extract helper'}],}"
+        )
+        result = parse_json_response(text)
+        assert result["issues"][0]["description"] == "duplicate branch"
+
     def test_json_array(self):
         text = '[1, 2, 3]'
         result = parse_json_response(text)

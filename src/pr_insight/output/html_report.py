@@ -7,7 +7,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from ..analyzer.engine import ReviewReport
+from ..analyzer.engine import ReviewFinding, ReviewReport, SEVERITY_ORDER
 from ..github.models import FileChange
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
@@ -98,21 +98,45 @@ def _build_code_views(report: ReviewReport) -> dict[str, dict[str, str]]:
     return views
 
 
-def generate_html_report(report: ReviewReport, output_path: Path) -> Path:
+def _filter_findings(findings: list[ReviewFinding], risk_level: str) -> list[ReviewFinding]:
+    """Filter findings using the same minimum severity rule as terminal output."""
+    min_value = SEVERITY_ORDER.get(risk_level, SEVERITY_ORDER["low"])
+    return [
+        finding
+        for finding in findings
+        if SEVERITY_ORDER.get(finding.severity, 0) >= min_value
+    ]
+
+
+def generate_html_report(
+    report: ReviewReport,
+    output_path: Path,
+    risk_level: str = "low",
+) -> Path:
     """Generate an HTML report from the review results."""
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     env.filters["md"] = _md_to_html
     template = env.get_template("report.html.j2")
     code_views: dict[str, dict[str, str]] = _build_code_views(report)
+    risks = _filter_findings(report.risks, risk_level)
+    suggestions = _filter_findings(report.suggestions, risk_level)
+    style_issues = _filter_findings(report.style_issues, risk_level)
 
     html = template.render(
         pr=report.pr_info,
         summary=report.summary,
-        risks=report.risks,
-        suggestions=report.suggestions,
-        style_issues=report.style_issues,
+        risks=risks,
+        suggestions=suggestions,
+        style_issues=style_issues,
         errors=report.errors,
-        stats=report.stats,
+        stats={
+            **report.stats,
+            "risks": len(risks),
+            "suggestions": len(suggestions),
+            "style_issues": len(style_issues),
+            "high_risk": len([r for r in risks if r.severity == "high"]),
+            "medium_risk": len([r for r in risks if r.severity == "medium"]),
+        },
         code_views=code_views,
     )
 
