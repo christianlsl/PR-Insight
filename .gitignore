@@ -12,3 +12,6 @@ venv/
 *.egg
 
 reports/
+
+.DS_Store
+ppt/
