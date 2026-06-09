@@ -8,6 +8,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from ..analyzer.engine import ReviewReport
+from ..github.models import FileChange
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
@@ -45,11 +46,64 @@ def _md_to_html(text) -> str:
     return "".join(parts)
 
 
+def _split_patch_views(file_change: FileChange) -> dict[str, str]:
+    """Build original/modified snippets and raw diff text from a unified patch."""
+    original_lines: list[str] = []
+    modified_lines: list[str] = []
+    diff_lines: list[str] = []
+
+    for line in (file_change.patch or "").splitlines():
+        diff_lines.append(line)
+
+        if line.startswith("@@"):
+            original_lines.append(line)
+            modified_lines.append(line)
+            continue
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        if line.startswith("-"):
+            original_lines.append(line[1:])
+            continue
+        if line.startswith("+"):
+            modified_lines.append(line[1:])
+            continue
+        if line.startswith(" "):
+            original_lines.append(line[1:])
+            modified_lines.append(line[1:])
+            continue
+        if line:
+            original_lines.append(line)
+            modified_lines.append(line)
+
+    return {
+        "file": file_change.path,
+        "old_path": file_change.old_path or "",
+        "status": file_change.status.value,
+        "language": file_change.language,
+        "additions": str(file_change.additions),
+        "deletions": str(file_change.deletions),
+        "original": "\n".join(original_lines).strip(),
+        "modified": "\n".join(modified_lines).strip(),
+        "diff": "\n".join(diff_lines).strip(),
+    }
+
+
+def _build_code_views(report: ReviewReport) -> dict[str, dict[str, str]]:
+    """Build file-path keyed code views for HTML issue drill-downs."""
+    views: dict[str, dict[str, str]] = {}
+    for file_change in report.pr_info.file_changes:
+        views[file_change.path] = _split_patch_views(file_change)
+        if file_change.old_path:
+            views[file_change.old_path] = views[file_change.path]
+    return views
+
+
 def generate_html_report(report: ReviewReport, output_path: Path) -> Path:
     """Generate an HTML report from the review results."""
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     env.filters["md"] = _md_to_html
     template = env.get_template("report.html.j2")
+    code_views: dict[str, dict[str, str]] = _build_code_views(report)
 
     html = template.render(
         pr=report.pr_info,
@@ -59,6 +113,7 @@ def generate_html_report(report: ReviewReport, output_path: Path) -> Path:
         style_issues=report.style_issues,
         errors=report.errors,
         stats=report.stats,
+        code_views=code_views,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

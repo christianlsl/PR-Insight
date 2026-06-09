@@ -25,10 +25,11 @@
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; overflow-wrap: break-word; word-break: break-word; }
         th { background: #f7fafc; font-weight: 600; color: #4a5568; }
         th:nth-child(1), td:nth-child(1) { width: 10%; }
-        th:nth-child(2), td:nth-child(2) { width: 18%; }
+        th:nth-child(2), td:nth-child(2) { width: 17%; }
         th:nth-child(3), td:nth-child(3) { width: 7%; }
-        th:nth-child(4), td:nth-child(4) { width: 32%; }
-        th:nth-child(5), td:nth-child(5) { width: 33%; }
+        th:nth-child(4), td:nth-child(4) { width: 28%; }
+        th:nth-child(5), td:nth-child(5) { width: 28%; }
+        th:nth-child(6), td:nth-child(6) { width: 10%; text-align: center; }
         .severity-high { color: #e53e3e; font-weight: bold; }
         .severity-medium { color: #dd6b20; font-weight: bold; }
         .severity-low { color: #3182ce; }
@@ -50,6 +51,32 @@
         .toc ul { list-style: none; padding: 0; margin: 0; }
         .toc li { margin: 4px 0; }
         .toc a { color: #3182ce; font-size: 0.9em; }
+        .view-btn { border: 1px solid #cbd5e0; background: #fff; color: #2d3748; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.85em; }
+        .view-btn:hover { border-color: #3182ce; color: #3182ce; }
+        .view-btn:disabled { color: #a0aec0; cursor: not-allowed; border-color: #e2e8f0; }
+        .code-modal { position: fixed; inset: 0; z-index: 1000; display: none; }
+        .code-modal.open { display: block; }
+        .modal-backdrop { position: absolute; inset: 0; background: rgba(26,32,44,0.62); }
+        .modal-panel { position: absolute; inset: 5vh 4vw; background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.24); display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 14px 18px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+        .modal-title { font-weight: 700; color: #2d3748; word-break: break-word; }
+        .modal-meta { color: #718096; font-size: 0.85em; margin-top: 3px; }
+        .modal-close { border: none; background: transparent; color: #4a5568; font-size: 1.5em; line-height: 1; cursor: pointer; padding: 0 4px; }
+        .modal-tabs { padding: 10px 18px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; flex-wrap: wrap; }
+        .modal-tab { border: 1px solid #cbd5e0; background: #fff; color: #4a5568; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+        .modal-tab.active { border-color: #3182ce; background: #ebf8ff; color: #2b6cb0; }
+        .modal-body { flex: 1; min-height: 0; overflow: auto; background: #1a202c; }
+        .modal-code { margin: 0; min-height: 100%; border-radius: 0; box-shadow: none; }
+        .diff-add { color: #9ae6b4; }
+        .diff-del { color: #feb2b2; }
+        .diff-hunk { color: #90cdf4; }
+        .diff-file { color: #fbd38d; }
+        @media (max-width: 720px) {
+            .modal-panel { inset: 2vh 2vw; }
+            table { font-size: 0.82em; }
+            th, td { padding: 8px; }
+            .view-btn { padding: 5px 8px; }
+        }
     </style>
 </head>
 <body>
@@ -106,7 +133,7 @@
         <section id="risks">
             <h2>Risk</h2>
             <table>
-                <thead><tr><th>Severity</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th></tr></thead>
+                <thead><tr><th>Severity</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th><th>View</th></tr></thead>
                 <tbody>
                 {% for r in risks %}
                 <tr>
@@ -115,6 +142,9 @@
                     <td>{{ r.line }}</td>
                     <td>{{ r.description | md }}</td>
                     <td>{{ r.suggestion | md }}</td>
+                    <td>
+                        <button class="view-btn" data-file="{{ r.file | e }}" {% if not code_views.get(r.file) %}disabled{% endif %}>查看</button>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -126,7 +156,7 @@
         <section id="suggestions">
             <h2>Review</h2>
             <table>
-                <thead><tr><th>Priority</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th></tr></thead>
+                <thead><tr><th>Priority</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th><th>View</th></tr></thead>
                 <tbody>
                 {% for s in suggestions %}
                 <tr>
@@ -135,6 +165,9 @@
                     <td>{{ s.line }}</td>
                     <td>{{ s.description | md }}</td>
                     <td>{{ s.suggestion | md }}</td>
+                    <td>
+                        <button class="view-btn" data-file="{{ s.file | e }}" {% if not code_views.get(s.file) %}disabled{% endif %}>查看</button>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -146,7 +179,7 @@
         <section id="style">
             <h2>Style</h2>
             <table>
-                <thead><tr><th>Type</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th></tr></thead>
+                <thead><tr><th>Type</th><th>File</th><th>Line</th><th>Description</th><th>Suggestion</th><th>View</th></tr></thead>
                 <tbody>
                 {% for s in style_issues %}
                 <tr>
@@ -155,6 +188,9 @@
                     <td>{{ s.line }}</td>
                     <td>{{ s.description | md }}</td>
                     <td>{{ s.suggestion | md }}</td>
+                    <td>
+                        <button class="view-btn" data-file="{{ s.file | e }}" {% if not code_views.get(s.file) %}disabled{% endif %}>查看</button>
+                    </td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -171,7 +207,103 @@
 
         <footer>Generated by PR-Insight</footer>
     </div>
+
+    <div class="code-modal" id="code-modal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal></div>
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="modal-title">Code View</div>
+                    <div class="modal-meta" id="modal-meta"></div>
+                </div>
+                <button class="modal-close" type="button" data-close-modal aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab active" type="button" data-view-tab="original">原始代码</button>
+                <button class="modal-tab" type="button" data-view-tab="modified">修改后代码</button>
+                <button class="modal-tab" type="button" data-view-tab="diff">PR Diff</button>
+            </div>
+            <div class="modal-body">
+                <pre class="modal-code"><code id="modal-code"></code></pre>
+            </div>
+        </div>
+    </div>
+    <script type="application/json" id="code-view-data">{{ code_views | tojson }}</script>
     <script>
+        const codeViews = JSON.parse(document.getElementById('code-view-data').textContent || '{}');
+        const modal = document.getElementById('code-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMeta = document.getElementById('modal-meta');
+        const modalCode = document.getElementById('modal-code');
+        let activeCodeView = null;
+        let activeTab = 'original';
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;');
+        }
+
+        function renderDiff(text) {
+            return String(text || 'No diff available.')
+                .split('\n')
+                .map(line => {
+                    let cls = '';
+                    if (line.startsWith('+++') || line.startsWith('---')) cls = 'diff-file';
+                    else if (line.startsWith('@@')) cls = 'diff-hunk';
+                    else if (line.startsWith('+')) cls = 'diff-add';
+                    else if (line.startsWith('-')) cls = 'diff-del';
+                    return `<span class="${cls}">${escapeHtml(line)}</span>`;
+                })
+                .join('\n');
+        }
+
+        function setTab(tab) {
+            activeTab = tab;
+            document.querySelectorAll('.modal-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.viewTab === tab);
+            });
+            if (!activeCodeView) return;
+            if (tab === 'diff') {
+                modalCode.innerHTML = renderDiff(activeCodeView.diff);
+            } else {
+                modalCode.textContent = activeCodeView[tab] || 'No code snippet available.';
+            }
+        }
+
+        function openCodeView(file) {
+            const view = codeViews[file];
+            if (!view) return;
+            activeCodeView = view;
+            modalTitle.textContent = view.old_path ? `${view.old_path} → ${view.file}` : view.file;
+            modalMeta.textContent = `${view.status} · +${view.additions}/-${view.deletions}`;
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+            setTab('original');
+        }
+
+        function closeCodeView() {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+            activeCodeView = null;
+        }
+
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', () => openCodeView(btn.dataset.file));
+        });
+        document.querySelectorAll('[data-close-modal]').forEach(el => {
+            el.addEventListener('click', closeCodeView);
+        });
+        document.querySelectorAll('.modal-tab').forEach(btn => {
+            btn.addEventListener('click', () => setTab(btn.dataset.viewTab));
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && modal.classList.contains('open')) {
+                closeCodeView();
+            }
+        });
+
         document.querySelectorAll('.copy-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const code = btn.parentElement.querySelector('code');

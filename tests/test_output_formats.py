@@ -14,7 +14,16 @@ def _make_report() -> ReviewReport:
         owner="o", repo="r", number=42, title="Fix critical bug", description="desc",
         author="dev", state="open", base_branch="main", head_branch="fix",
         url="https://github.com/o/r/pull/42", files_changed=2, additions=20, deletions=10,
-        file_changes=[FileChange("src/main.py", FileStatus.MODIFIED, 20, 10, "diff")],
+        file_changes=[FileChange(
+            "src/main.py",
+            FileStatus.MODIFIED,
+            20,
+            10,
+            "@@ -8,4 +8,4 @@ def query(sql):\n"
+            " def query(sql):\n"
+            "-    return db.execute(sql)\n"
+            "+    return db.execute(sql, params={})\n",
+        )],
     )
     report = ReviewReport(pr_info=pr)
     report.summary = {"purpose": "Fix bug", "impact": "core", "tech_details": "refactored"}
@@ -89,6 +98,11 @@ class TestGenerateHtmlReport:
         assert "<div class=\"label\">Risk</div>" in content
         assert "<div class=\"label\">Review</div>" in content
         assert "<div class=\"label\">Style</div>" in content
+        assert "<th>View</th>" in content
+        assert "data-file=\"src/main.py\"" in content
+        assert "原始代码" in content
+        assert "return db.execute(sql)" in content
+        assert "return db.execute(sql, params={})" in content
 
     def test_creates_parent_dirs(self, tmp_path):
         report = _make_report()
